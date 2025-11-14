@@ -3,3 +3,6 @@ link-mode = "copy"
 
 # Allow pre-release packages (required for agent-framework)
 prerelease = "allow"
+
+# Reinstall packages to avoid RECORD file issues
+reinstall = true

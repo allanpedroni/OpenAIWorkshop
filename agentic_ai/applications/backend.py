@@ -16,6 +16,8 @@ from collections import defaultdict
 import uvicorn  
 from fastapi import FastAPI  
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel  
 from dotenv import load_dotenv  
 from fastapi import FastAPI, Depends, Header, WebSocket, WebSocketDisconnect
@@ -64,9 +66,30 @@ def verify_token(authorization: str | None = Header(None, alias="Authorization")
 # Bring project root onto the path & load your agent dynamically  
 # ------------------------------------------------------------------  
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  
-agent_module_path = os.getenv("AGENT_MODULE")  
-agent_module = __import__(agent_module_path, fromlist=["Agent"])  # type: ignore[arg-type]  
-Agent = getattr(agent_module, "Agent")  
+
+# Available agent modules that can be selected
+AVAILABLE_AGENTS = [
+    "agents.agent_framework.single_agent",
+    "agents.agent_framework.multi_agent.handoff_multi_domain_agent",
+    "agents.agent_framework.multi_agent.magentic_group",
+    "agents.agent_framework.multi_agent.reflection_agent",
+    "agents.agent_framework.multi_agent.reflection_workflow_agent",
+]
+
+# Current active agent module (can be changed at runtime)
+CURRENT_AGENT_MODULE = os.getenv("AGENT_MODULE", AVAILABLE_AGENTS[0])
+
+def load_agent_class(module_path: str):
+    """Dynamically load and return the Agent class from the given module path."""
+    try:
+        agent_module = __import__(module_path, fromlist=["Agent"])  # type: ignore[arg-type]
+        return getattr(agent_module, "Agent")
+    except Exception as e:
+        print(f"Error loading agent module {module_path}: {e}")
+        raise
+
+# Load initial agent
+Agent = load_agent_class(CURRENT_AGENT_MODULE)  
   
 # ------------------------------------------------------------------  
 # Get the correct state-store implementation  
@@ -88,6 +111,15 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],  # Allow all headers
 )
+
+# Serve static files from React build (production mode only)
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_ASSET_DIR = STATIC_DIR / "static"
+
+if STATIC_ASSET_DIR.exists():  # CRA build places assets in nested /static directory
+    app.mount("/static", StaticFiles(directory=str(STATIC_ASSET_DIR)), name="static")
+elif STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ---------------------------------------------------------------
 # WebSocket connection manager (per session broadcast)
@@ -161,7 +193,94 @@ async def reset_session(req: SessionResetRequest, token: str = Depends(verify_to
 @app.get("/history/{session_id}", response_model=ConversationHistoryResponse)  
 async def get_conversation_history(session_id: str, token: str = Depends(verify_token)):  
     history = STATE_STORE.get(f"{session_id}_chat_history", [])  
-    return ConversationHistoryResponse(session_id=session_id, history=history)  
+    return ConversationHistoryResponse(session_id=session_id, history=history)
+
+# ──────────────────────────────────────────────────────────────
+# Agent Management Endpoints
+# ──────────────────────────────────────────────────────────────
+class AgentInfo(BaseModel):
+    module_path: str
+    display_name: str
+    description: str
+
+class AgentListResponse(BaseModel):
+    agents: List[AgentInfo]
+    current_agent: str
+
+class SetAgentRequest(BaseModel):
+    module_path: str
+
+@app.get("/agents", response_model=AgentListResponse)
+async def list_agents(token: str = Depends(verify_token)):
+    """List all available agent modules and the currently active one."""
+    agents = []
+    for module_path in AVAILABLE_AGENTS:
+        # Parse display name and description from module path
+        parts = module_path.split('.')[-1]
+        display_name = parts.replace('_', ' ').title()
+        
+        # Add descriptions for known agents
+        descriptions = {
+            "single_agent": "Simple single-agent chat without orchestration",
+            "handoff_multi_domain_agent": "Multi-agent system with domain-specific specialists and handoffs",
+            "magentic_group": "MagenticOne-style orchestrator with specialist agents",
+            "reflection_agent": "Agent with built-in reflection and self-critique",
+            "reflection_workflow_agent": "Workflow-based reflection with quality assurance gates",
+        }
+        description = descriptions.get(parts, "Agent module")
+        
+        agents.append(AgentInfo(
+            module_path=module_path,
+            display_name=display_name,
+            description=description
+        ))
+    
+    return AgentListResponse(
+        agents=agents,
+        current_agent=CURRENT_AGENT_MODULE
+    )
+
+@app.post("/agents/set")
+async def set_active_agent(req: SetAgentRequest, token: str = Depends(verify_token)):
+    """Change the active agent module."""
+    global CURRENT_AGENT_MODULE, Agent
+    
+    if req.module_path not in AVAILABLE_AGENTS:
+        return {
+            "status": "error",
+            "message": f"Invalid agent module. Available: {AVAILABLE_AGENTS}"
+        }
+    
+    try:
+        # Load new agent class
+        NewAgent = load_agent_class(req.module_path)
+        
+        # Update globals
+        CURRENT_AGENT_MODULE = req.module_path
+        Agent = NewAgent
+        
+        return {
+            "status": "success",
+            "message": f"Active agent changed to {req.module_path}",
+            "current_agent": CURRENT_AGENT_MODULE
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to load agent: {str(e)}"
+        }
+
+# ──────────────────────────────────────────────────────────────
+# Root route to serve React app
+# ──────────────────────────────────────────────────────────────
+@app.get("/")
+async def read_root():
+    """Serve the React frontend index.html"""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    return {"message": "OpenAI Workshop Backend API", "version": "1.0.0"}
+
 # ──────────────────────────────────────────────────────────────
 # NEW: WebSocket streaming endpoint
 #   - Wraps agent.run_stream

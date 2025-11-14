@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+**/.venv/
+**/.venv
+**/venv/
+**/venv
+**/__pycache__/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+README.md
+SETUP.md
+MULTI_TENANT_MCP_SECURITY.md
+customer_scenarios.md
+
+# Deployment
+deploy_azure.sh
+Dockerfile*
+*.bicep
+
+# Logs
+*.log
+logs/

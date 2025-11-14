@@ -1,0 +1,25 @@
+name: openai-workshop
+metadata:
+  template: openai-workshop@0.0.1-beta
+
+infra:
+  provider: bicep
+  path: infra
+  module: main.azd
+  parameters: main.azd.bicepparam
+
+services:
+  mcp:
+    project: ./mcp
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: ./
+  app:
+    project: ./agentic_ai/applications
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: ../

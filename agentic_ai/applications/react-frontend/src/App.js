@@ -21,6 +21,12 @@ import {
   ThemeProvider,
   createTheme,
   CssBaseline,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -39,7 +45,20 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { v4 as uuidv4 } from 'uuid';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
+const resolveBackendUrl = () => {
+  if (process.env.REACT_APP_BACKEND_URL) {
+    return process.env.REACT_APP_BACKEND_URL;
+  }
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:7000';
+    }
+    return window.location.origin;
+  }
+  return 'http://localhost:7000';
+};
+
+const BACKEND_URL = resolveBackendUrl();
 const WS_URL = BACKEND_URL.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/chat';
 
 const theme = createTheme({
@@ -70,6 +89,11 @@ function App() {
   const [currentTurn, setCurrentTurn] = useState(0); // Track conversation turn for tool call grouping
   const [lastFinalAnswer, setLastFinalAnswer] = useState(null); // Track last final answer for deduplication
 
+  // Agent selection state
+  const [availableAgents, setAvailableAgents] = useState([]);
+  const [currentAgent, setCurrentAgent] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+
   const wsRef = useRef(null);
   const messagesEndRef = useRef(null);
   const processEndRef = useRef(null);
@@ -84,6 +108,26 @@ function App() {
 
   useEffect(scrollToBottom, [messages]);
   useEffect(scrollProcessToBottom, [orchestratorEvents, agentEvents]);
+
+  // Fetch available agents on component mount
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/agents`);
+        const data = await response.json();
+        setAvailableAgents(data.agents);
+        setCurrentAgent(data.current_agent);
+      } catch (error) {
+        console.error('Error fetching agents:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to load available agents',
+          severity: 'error',
+        });
+      }
+    };
+    fetchAgents();
+  }, []);
 
   useEffect(() => {
     // Connect to WebSocket
@@ -358,6 +402,45 @@ function App() {
     setSessionId(newSessionId);
   };
 
+  const handleAgentChange = async (event) => {
+    const newAgentModule = event.target.value;
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/agents/set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_path: newAgentModule }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        setCurrentAgent(newAgentModule);
+        setSnackbar({
+          open: true,
+          message: `Agent changed successfully to ${newAgentModule.split('.').pop().replace(/_/g, ' ')}`,
+          severity: 'success',
+        });
+        
+        // Start a new session when agent changes
+        handleNewSession();
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to change agent: ${data.message}`,
+          severity: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('Error changing agent:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to change agent',
+        severity: 'error',
+      });
+    }
+  };
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -574,6 +657,47 @@ function App() {
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                 🤖 Magentic AI Assistant
               </Typography>
+              
+              {/* Agent Selector */}
+              <FormControl sx={{ minWidth: 250, mr: 2 }} size="small">
+                <InputLabel id="agent-select-label" sx={{ color: 'white' }}>
+                  Active Agent
+                </InputLabel>
+                <Select
+                  labelId="agent-select-label"
+                  value={currentAgent}
+                  label="Active Agent"
+                  onChange={handleAgentChange}
+                  disabled={isProcessing}
+                  sx={{
+                    color: 'white',
+                    '.MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'white',
+                    },
+                    '.MuiSvgIcon-root': {
+                      color: 'white',
+                    },
+                  }}
+                >
+                  {availableAgents.map((agent) => (
+                    <MenuItem key={agent.module_path} value={agent.module_path}>
+                      <Box>
+                        <Typography variant="body2">{agent.display_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {agent.description}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              
               <Button
                 color="inherit"
                 onClick={handleNewSession}
@@ -667,6 +791,22 @@ function App() {
             </Container>
           </Paper>
         </Box>
+        
+        {/* Snackbar for notifications */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={4000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </ThemeProvider>
   );

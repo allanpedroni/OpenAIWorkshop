@@ -79,6 +79,27 @@ Welcome to the official repository for the Microsoft AI Agentic Workshop! This r
 4. Try the **[Fraud Detection Workflow Demo](agentic_ai/workflow/fraud_detection/)** to see enterprise orchestration patterns in action.
 5. Dive into [System Architecture](./ARCHITECTURE.md) before building and customizing your agent solutions.  
 6. Utilize the [Support Guide](./SUPPORT.md) for troubleshooting and assistance.  
+
+---
+
+## Deploy to Azure
+
+Deploy the complete solution to Azure with infrastructure as code:
+
+**🚀 Quick Deploy with Azure Developer CLI (Recommended):**
+```bash
+azd auth login
+azd up
+```
+
+**Alternative Options:**
+- **PowerShell Script:** `cd infra && ./deploy.ps1 -Environment dev`
+- **Manual Bicep:** `az deployment sub create --template-file infra/main.bicep`
+
+📚 **Deployment Guides:**
+- [Azure Developer CLI (azd) Guide](./AZD_DEPLOYMENT.md) - Single-command deployment
+- [Complete Azure Deployment Guide](./DEPLOYMENT.md) - All deployment methods
+- [Infrastructure Documentation](./infra/README.md) - Bicep templates and architecture
   
 ---  
   

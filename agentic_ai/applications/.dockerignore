@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.python-version
+**/.venv/
+**/.venv
+**/venv/
+**/venv
+**/__pycache__/
+
+# Environment
+.env
+.env.local
+.env.sample
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
+.chainlit/
+run_*.bat
+run_*.sh
+*.md
+uv.lock
+uv.toml
+
+# React development
+react-frontend/node_modules/
+react-frontend/.env
+react-frontend/build/
+react-frontend/coverage/
+
+# Logs
+*.log
+logs/

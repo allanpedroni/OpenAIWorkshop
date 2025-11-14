@@ -1,0 +1,66 @@
+# Python virtual environments and cache
+**/.venv/
+**/.venv
+**/venv/
+**/venv
+**/__pycache__/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Environment files
+**/.env
+**/.env.local
+**/.env.sample
+.env
+.env.local
+.env.sample
+
+# IDEs
+**/.vscode/
+**/.idea/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
+**/.chainlit/
+.chainlit/
+**/run_*.bat
+**/run_*.sh
+run_*.bat
+run_*.sh
+**/*.md
+**/uv.lock
+**/uv.toml
+
+# React development
+**/node_modules/
+**/build/
+**/coverage/
+applications/react-frontend/node_modules/
+applications/react-frontend/build/
+applications/react-frontend/coverage/
+
+# Exclude other agent frameworks (only need agent_framework)
+agents/semantic_kernel/
+agents/autogen/
+agents/agent_service/
+
+# Logs
+*.log
+**/logs/
+logs/

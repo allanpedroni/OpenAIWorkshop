@@ -1,0 +1,5 @@
+# .azure directory - azd environment state
+.azure/
+
+# Azure Developer CLI local state
+**/.azure/
