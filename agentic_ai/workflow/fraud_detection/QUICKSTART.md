@@ -246,12 +246,14 @@ if "lock" in decision.approved_action:
 ### Check Documentation
 - [Full README](README.md)
 - [Implementation Details](IMPLEMENTATION.md)
-- [Workflow Architecture](../../WORKFLOW_README.md)
+- [Workflow Architecture](../README.md)
 
 ### Review Examples
-- [Human-in-the-Loop](../human-in-the-loop/)
-- [Control Flow](../control-flow/)
-- [Parallelism](../parallelism/)
+- [Human-in-the-Loop](../human-in-the-loop.md)
+<!-- lychee-ignore -->
+- DEAD LINK Control Flow ../control-flow/
+<!-- lychee-ignore -->
+- DEAD LINK Parallelism ../parallelism/
 
 ### Common Issues
 See [Troubleshooting](#-troubleshooting) section above

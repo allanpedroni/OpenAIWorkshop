@@ -410,11 +410,13 @@ Total:                      ~17 seconds (51% faster!)
 
 ## 📚 Related Documentation
 
-- [Workflow README](../../WORKFLOW_README.md) - Architecture overview
-- [State Management Guide](../../../agents/agent_framework/STATE_MANAGEMENT.md) - Persistence patterns
-- [Human-in-the-Loop Examples](../human-in-the-loop/) - HITL patterns
-- [Control Flow Examples](../control-flow/) - Switch/case routing
-- [Parallelism Examples](../parallelism/) - Fan-out patterns
+- CHECK LINK [Workflow README](README.md) - Architecture overview
+- DEAD LINK State Management Guide ../../../agents/agent_framework/STATE_MANAGEMENT.md - Persistence patterns
+- [Human-in-the-Loop Examples](../human-in-the-loop.md) - HITL patterns
+<!-- lychee-ignore-start -->
+- DEAD LINK Control Flow Examples ../control-flow/ - Switch/case routing
+- DEAD LINK Parallelism Examples ../parallelism/ - Fan-out patterns
+<!-- lychee-ignore-end -->
 
 ---
 

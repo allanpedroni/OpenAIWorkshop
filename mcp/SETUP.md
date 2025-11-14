@@ -580,7 +580,7 @@ sqlite3 data/contoso.db "SELECT COUNT(*) FROM Customers;"
 ### Getting Help
 
 - **Documentation:** See [README.md](README.md) for architecture details
-- **Cosmos DB Guide:** See [README_COSMOS.md](README_COSMOS.md) for implementation details
+- **Cosmos DB Guide:** See [README_COSMOS.md](data/README_SETUP.md) for implementation details
 - **Issues:** Open an issue in the repository
 - **Azure Support:** Use Azure Portal support for Cosmos DB issues
 

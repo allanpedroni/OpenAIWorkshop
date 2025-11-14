@@ -190,12 +190,15 @@ async def resume_workflow(session_id: str, decision: ReviewResponse):
 
 ## Additional Resources
 
+
+
 - **Samples**
-  - [`workflow_as_agent_human_in_the_loop_azure.py`](../python/samples/getting_started/workflows/agents/workflow_as_agent_human_in_the_loop_azure.py)
-  - [`checkpoint_with_human_in_the_loop.py`](../python/samples/getting_started/workflows/checkpoint/checkpoint_with_human_in_the_loop.py)
+  - DEAD LINK `workflow_as_agent_human_in_the_loop_azure.py` ../python/samples/getting_started/workflows/agents/workflow_as_agent_human_in_the_loop_azure.py
+  - DEAD LINK `checkpoint_with_human_in_the_loop.py` ../python/samples/getting_started/workflows/checkpoint/checkpoint_with_human_in_the_loop.py
 - **API References**
-  - [`RequestInfoExecutor`](../python/packages/core/agent_framework/_workflows/_request_info_executor.py)
-  - [`WorkflowBuilder`](../python/packages/core/agent_framework/_workflows/_workflow.py)
-  - [`WorkflowAgent`](../python/packages/core/agent_framework/_workflows/_workflow_agent.py)
+  - DEAD LINK `RequestInfoExecutor` ../python/packages/core/agent_framework/_workflows/_request_info_executor.py
+  - DEAD LINK `WorkflowBuilder` ../python/packages/core/agent_framework/_workflows/_workflow.py
+  - DEAD LINK `WorkflowAgent` ../python/packages/core/agent_framework/_workflows/_workflow_agent.py
+
 
 By combining `RequestInfoExecutor` with checkpoint-aware workflows, you can build resilient human-in-the-loop systems that pause safely, resume on demand, and provide a clear audit trail for every decision.
