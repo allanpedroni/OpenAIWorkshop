@@ -14,6 +14,8 @@ param cosmosContainerName string = 'workshop_agent_state_store'
 param useCosmosManagedIdentity bool = false
 @description('Optional user-assigned managed identity resource ID attached to the MCP container app')
 param userAssignedIdentityResourceId string = ''
+@description('Client ID for the user-assigned managed identity attached to the MCP container app')
+param userAssignedIdentityClientId string = ''
 param tags object
 
 @description('Container image tag')
@@ -58,6 +60,16 @@ var cosmosEnvSettings = concat([
     secretRef: 'cosmosdb-key'
   }
 ] : [])
+var managedIdentityEnv = !empty(userAssignedIdentityClientId) ? [
+  {
+    name: 'AZURE_CLIENT_ID'
+    value: userAssignedIdentityClientId
+  }
+  {
+    name: 'MANAGED_IDENTITY_CLIENT_ID'
+    value: userAssignedIdentityClientId
+  }
+] : []
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = {
   name: containerRegistryName
@@ -104,7 +116,7 @@ resource mcpService 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: cosmosEnvSettings
+          env: concat(cosmosEnvSettings, managedIdentityEnv)
         }
       ]
       scale: {

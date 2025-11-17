@@ -1,8 +1,0 @@
-# Use copy mode instead of hardlinks to avoid OneDrive issues
-link-mode = "copy"
-
-# Allow pre-release packages (required for agent-framework)
-prerelease = "allow"
-
-# Reinstall packages to avoid RECORD file issues
-reinstall = true

@@ -203,6 +203,7 @@ module mcpService './modules/mcp-service.bicep' = {
     cosmosContainerName: cosmosdb.outputs.agentStateContainer
     useCosmosManagedIdentity: secureCosmos
     userAssignedIdentityResourceId: secureCosmos ? appIdentity!.outputs.resourceId : ''
+    userAssignedIdentityClientId: secureCosmos ? appIdentity!.outputs.clientId : ''
     imageName: mcpImageName
     tags: tags
   }
@@ -224,6 +225,7 @@ module application './modules/application.bicep' = {
     cosmosDbKey: secureCosmos ? '' : cosmosdb.outputs.primaryKey
     useCosmosManagedIdentity: secureCosmos
     userAssignedIdentityResourceId: secureCosmos ? appIdentity!.outputs.resourceId : ''
+    userAssignedIdentityClientId: secureCosmos ? appIdentity!.outputs.clientId : ''
     azureOpenAIEndpoint: openai.outputs.endpoint
     azureOpenAIKey: openai.outputs.key
     azureOpenAIDeploymentName: openai.outputs.chatDeploymentName

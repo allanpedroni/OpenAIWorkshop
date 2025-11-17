@@ -20,6 +20,9 @@ param tags object = {
   ManagedBy: 'Bicep'
 }
 
+@description('Enable user-assigned managed identity for Container Apps to access Cosmos DB without keys')
+param useCosmosManagedIdentity bool = true
+
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: '${baseName}-${environmentName}-rg'
@@ -88,6 +91,28 @@ module containerAppsEnv 'modules/container-apps-environment.bicep' = {
   }
 }
 
+// Managed identity used by container apps when Cosmos managed identity mode is enabled
+module containerAppsIdentity 'modules/managed-identity.bicep' = {
+  scope: rg
+  name: 'container-apps-identity'
+  params: {
+    location: location
+    name: '${baseName}-${environmentName}-apps-mi'
+    tags: tags
+  }
+}
+
+// Grant Cosmos DB data plane roles to the managed identity
+module cosmosManagedIdentityRoles 'modules/cosmos-roles.bicep' = if (useCosmosManagedIdentity) {
+  scope: rg
+  name: 'cosmos-managed-identity-roles'
+  params: {
+    principalId: containerAppsIdentity.outputs.principalId
+    cosmosDbAccountName: cosmosdb.outputs.accountName
+    roleAssignmentSalt: 'container-apps'
+  }
+}
+
 // MCP Service Container App
 module mcpService 'modules/mcp-service.bicep' = {
   scope: rg
@@ -99,8 +124,11 @@ module mcpService 'modules/mcp-service.bicep' = {
     containerAppsEnvironmentId: containerAppsEnv.outputs.environmentId
     containerRegistryName: acr.outputs.registryName
     cosmosDbEndpoint: cosmosdb.outputs.endpoint
-    cosmosDbKey: cosmosdb.outputs.primaryKey
+    cosmosDbKey: useCosmosManagedIdentity ? '' : cosmosdb.outputs.primaryKey
     cosmosDbName: cosmosdb.outputs.databaseName
+    useCosmosManagedIdentity: useCosmosManagedIdentity
+    userAssignedIdentityResourceId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.resourceId : ''
+    userAssignedIdentityClientId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.clientId : ''
     tags: tags
   }
 }
@@ -112,16 +140,20 @@ module application 'modules/application.bicep' = {
   params: {
     location: location
     baseName: baseName
-    environmentName: environmentName
     containerAppsEnvironmentId: containerAppsEnv.outputs.environmentId
     containerRegistryName: acr.outputs.registryName
     azureOpenAIEndpoint: openai.outputs.endpoint
     azureOpenAIKey: openai.outputs.key
     azureOpenAIDeploymentName: openai.outputs.chatDeploymentName
+    azureOpenAIEmbeddingDeploymentName: openai.outputs.embeddingDeploymentName
     mcpServiceUrl: mcpService.outputs.serviceUrl
     cosmosDbEndpoint: cosmosdb.outputs.endpoint
-    cosmosDbKey: cosmosdb.outputs.primaryKey
+    cosmosDbKey: useCosmosManagedIdentity ? '' : cosmosdb.outputs.primaryKey
     cosmosDbName: cosmosdb.outputs.databaseName
+    cosmosStateContainerName: cosmosdb.outputs.agentStateContainer
+    useCosmosManagedIdentity: useCosmosManagedIdentity
+    userAssignedIdentityResourceId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.resourceId : ''
+    userAssignedIdentityClientId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.clientId : ''
     tags: tags
   }
 }

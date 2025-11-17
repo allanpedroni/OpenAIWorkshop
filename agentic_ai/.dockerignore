@@ -45,6 +45,7 @@ run_*.bat
 run_*.sh
 **/*.md
 **/uv.lock
+!applications/uv.lock
 **/uv.toml
 
 # React development

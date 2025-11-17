@@ -19,7 +19,7 @@ var agentStateContainerName = 'workshop_agent_state_store'
 var cosmosDbName = '${baseName}-${environmentName}-cosmos'
 var databaseName = 'contoso'
 
-resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2025-10-15' = {
   name: cosmosDbName
   location: location
   kind: 'GlobalDocumentDB'
@@ -46,7 +46,7 @@ resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   tags: tags
 }
 
-resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' = {
+resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2025-10-15' = {
   parent: cosmosDb
   name: databaseName
   properties: {
@@ -57,7 +57,7 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15
 }
 
 // Customers container
-resource customersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+resource customersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-10-15' = {
   parent: database
   name: 'Customers'
   properties: {
@@ -76,7 +76,7 @@ resource customersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
 }
 
 // Subscriptions container
-resource subscriptionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+resource subscriptionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-10-15' = {
   parent: database
   name: 'Subscriptions'
   properties: {
@@ -91,7 +91,7 @@ resource subscriptionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDataba
 }
 
 // Products container
-resource productsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+resource productsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-10-15' = {
   parent: database
   name: 'Products'
   properties: {
@@ -106,7 +106,7 @@ resource productsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
 }
 
 // Promotions container
-resource promotionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+resource promotionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-10-15' = {
   parent: database
   name: 'Promotions'
   properties: {
@@ -121,15 +121,19 @@ resource promotionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases
 }
 
 // Agent State Store container
-resource agentStateContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+resource agentStateContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2025-10-15' = {
   parent: database
   name: agentStateContainerName
   properties: {
     resource: {
       id: agentStateContainerName
       partitionKey: {
-        paths: ['/session_id']
-        kind: 'Hash'
+        paths: [
+          '/tenant_id'
+          '/id'
+        ]
+        kind: 'MultiHash'
+        version: 2
       }
     }
   }

@@ -1,17 +1,17 @@
 """  
 Key-value state-store utilities.  
   
-Document schema  
----------------  
-{  
-    "id"        : "<session_id>",   # required by Cosmos  
-    "tenant_id" : "<tenant_id>",    # application tenant (defaults to "default")  
-    "value"     : <JSON-serialisable python object>  
-}  
-  
-Partition-key  
--------------  
-Hierarchical / multi-hash on                /tenant_id  +  /id  
+Document schema
+---------------
+{
+    "id"        : "<session_id>",   # required by Cosmos
+    "tenant_id" : "<tenant_id>",    # application tenant (defaults to "default")
+    "value"     : <JSON-serialisable python object>
+}
+
+Partition-key
+-------------
+Hierarchical / multi-hash on                /tenant_id  +  /id
 """  
   
 from __future__ import annotations  
@@ -22,23 +22,15 @@ import logging
 import collections.abc as abc  
 from typing import Any, Dict, Iterator, List, Optional  
 from datetime import datetime  
+from azure.identity import ClientSecretCredential, DefaultAzureCredential 
 
-# ---------------------------------------------------------------------------  
-# 3rd-party SDKs  
-# ---------------------------------------------------------------------------  
-try:  
-    from azure.cosmos import (  
-        CosmosClient,  
-        PartitionKey,  
-        exceptions as cosmos_exceptions,  
-    )  
-except ImportError:  
-    CosmosClient = None  # type: ignore  
+from azure.cosmos import (  
+    CosmosClient,  
+    PartitionKey,  
+    exceptions as cosmos_exceptions,  
+)  
+
   
-try:  
-    from azure.identity import ClientSecretCredential, DefaultAzureCredential  
-except ImportError:  
-    ClientSecretCredential = DefaultAzureCredential = None  # type: ignore  
 
   
 def make_json_serializable(obj):  
@@ -80,7 +72,8 @@ class CosmosDBStateStore(abc.MutableMapping):
         if CosmosClient is None:  
             raise RuntimeError("azure-cosmos is not installed")  
   
-        endpoint = os.getenv("COSMOSDB_ENDPOINT") or os.getenv("COSMOS_DB_ENDPOINT")  
+        endpoint = os.getenv("COSMOSDB_ENDPOINT")
+        print("endpoint ", endpoint)
         if not endpoint:  
             raise RuntimeError("COSMOSDB_ENDPOINT must be defined")  
   
@@ -100,8 +93,8 @@ class CosmosDBStateStore(abc.MutableMapping):
             or "state_store"  
         )  
   
-        # Partition key: /tenant_id  +  /id  
-        pk = PartitionKey(path=["/tenant_id", "/id"], kind="MultiHash")  
+        # Partition key: /tenant_id  +  /id
+        pk = PartitionKey(path=["/tenant_id", "/id"], kind="MultiHash")
   
         self.database = self.client.create_database_if_not_exists(id=db_name)  
         self.container = self.database.create_container_if_not_exists(  
@@ -122,27 +115,21 @@ class CosmosDBStateStore(abc.MutableMapping):
             os.getenv("AAD_TENANT_ID"),  
         )  
         if c_id and c_secret and t_id:  
-            if ClientSecretCredential is None:  
-                raise RuntimeError("azure-identity is not installed")  
             logging.info("CosmosDBStateStore: authenticating with AAD client-secret")  
             return ClientSecretCredential(  
                 tenant_id=t_id, client_id=c_id, client_secret=c_secret  
             )  
   
-        if DefaultAzureCredential is None:  
-            raise RuntimeError(  
-                "No Cosmos key or AAD creds found, and azure-identity is missing."  
-            )  
         logging.info("CosmosDBStateStore: authenticating with DefaultAzureCredential")  
         return DefaultAzureCredential(exclude_interactive_browser_credential=True)  
   
     # ------------------------- internal helpers -------------------------  
     def _read(self, session_id: str) -> Optional[Dict[str, Any]]:  
         try:  
-            return self.container.read_item(  
-                item=session_id,  
-                partition_key=[self.tenant_id, session_id],  
-            )  
+            return self.container.read_item(
+                item=session_id,
+                partition_key=[self.tenant_id, session_id],
+            )
         except cosmos_exceptions.CosmosResourceNotFoundError:  
             return None  
   
@@ -160,20 +147,20 @@ class CosmosDBStateStore(abc.MutableMapping):
     def __setitem__(self, session_id: str, value: Any) -> None:  
         # Ensure value is JSON-serializable before upserting
         serializable_value = make_json_serializable(value)
-        self.container.upsert_item(  
-            {  
-                "id": session_id,          # unique within a tenant  
-                "tenant_id": self.tenant_id,  
-                "value": serializable_value,  
-            }  
-        )  
+        self.container.upsert_item(
+            {
+                "id": session_id,          # unique within a tenant
+                "tenant_id": self.tenant_id,
+                "value": serializable_value,
+            }
+        )
   
     def __delitem__(self, session_id: str) -> None:  
         try:  
-            self.container.delete_item(  
-                item=session_id,  
-                partition_key=[self.tenant_id, session_id],  
-            )  
+            self.container.delete_item(
+                item=session_id,
+                partition_key=[self.tenant_id, session_id],
+            )
         except cosmos_exceptions.CosmosResourceNotFoundError:  
             raise KeyError(session_id)  
   
@@ -205,15 +192,8 @@ def get_state_store() -> Dict[str, Any] | CosmosDBStateStore:
     """  
     Return a CosmosDBStateStore if Cosmos configuration exists, else a dict.  
     """  
-    have_endpoint = os.getenv("COSMOSDB_ENDPOINT") or os.getenv("COSMOS_DB_ENDPOINT")  
-    have_key = os.getenv("COSMOSDB_KEY")  
-    have_aad = (  
-        os.getenv("AAD_CLIENT_ID")  
-        and os.getenv("AAD_CLIENT_SECRET")  
-        and os.getenv("AAD_TENANT_ID")  
-    )  
-  
-    if have_endpoint and (have_key or have_aad):  
+    have_endpoint = os.getenv("COSMOSDB_ENDPOINT")  
+    if have_endpoint:
         logging.info("Using Cosmos DB state store (tenant_id + id partition)")  
         return CosmosDBStateStore()  
   

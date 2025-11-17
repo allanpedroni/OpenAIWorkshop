@@ -30,6 +30,9 @@ param useCosmosManagedIdentity bool = false
 @description('Optional user-assigned managed identity resource ID attached to the container app')
 param userAssignedIdentityResourceId string = ''
 
+@description('Client ID for the user-assigned managed identity attached to the container app')
+param userAssignedIdentityClientId string = ''
+
 @description('Azure OpenAI endpoint URL')
 param azureOpenAIEndpoint string
 
@@ -115,6 +118,16 @@ var cosmosKeyEnv = (!useCosmosManagedIdentity && !empty(cosmosDbKey)) ? [
 ] : []
 
 var cosmosEnvSettings = concat(cosmosEndpointEnv, cosmosDbNameEnv, cosmosContainerEnv)
+var managedIdentityEnv = !empty(userAssignedIdentityClientId) ? [
+  {
+    name: 'AZURE_CLIENT_ID'
+    value: userAssignedIdentityClientId
+  }
+  {
+    name: 'MANAGED_IDENTITY_CLIENT_ID'
+    value: userAssignedIdentityClientId
+  }
+] : []
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = {
   name: containerRegistryName
@@ -200,7 +213,7 @@ resource application 'Microsoft.App/containerApps@2023-05-01' = {
               name: 'MCP_SERVER_URI'
               value: mcpServiceUrl
             }
-          ], cosmosEnvSettings, cosmosKeyEnv, [
+          ], cosmosEnvSettings, cosmosKeyEnv, managedIdentityEnv, [
             {
               name: 'COSMOS_USE_MANAGED_IDENTITY'
               value: string(useCosmosManagedIdentity)

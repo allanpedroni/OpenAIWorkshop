@@ -63,11 +63,11 @@ else:
         if fallback_value and fallback_value not in EXPECTED_AUDIENCES:
             EXPECTED_AUDIENCES.append(fallback_value)
 
-ALLOWED_EMAIL_DOMAIN = (os.getenv("ALLOWED_EMAIL_DOMAIN") or "").strip()
+ALLOWED_EMAIL_DOMAIN = (os.getenv("ALLOWED_EMAIL_DOMAIN", "")).strip()
 ALLOWED_EMAIL_DOMAIN_LOWER = ALLOWED_EMAIL_DOMAIN.lower() if ALLOWED_EMAIL_DOMAIN else ""
-FRONTEND_CLIENT_ID = os.getenv("CLIENT_ID") or os.getenv("AAD_CLIENT_ID")
-AAD_API_SCOPE = os.getenv("AAD_API_SCOPE") or os.getenv("MCP_SCOPE")
-AUTHORITY = os.getenv("AUTHORITY")
+FRONTEND_CLIENT_ID = os.getenv("CLIENT_ID", os.getenv("AAD_CLIENT_ID", ""))
+AAD_API_SCOPE = os.getenv("AAD_API_SCOPE", os.getenv("MCP_SCOPE", ""))
+AUTHORITY = os.getenv("AUTHORITY", "")
 if not AUTHORITY and not DISABLE_AUTH and AAD_TENANT_ID:
     AUTHORITY = f"https://login.microsoftonline.com/{AAD_TENANT_ID}"
 JWKS_URL_TEMPLATE = "https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys"
@@ -307,10 +307,10 @@ async def get_auth_config():
         return AuthConfigResponse(authEnabled=False)
     return AuthConfigResponse(
         authEnabled=True,
-        clientId=FRONTEND_CLIENT_ID,
-        authority=AUTHORITY,
-        scope=AAD_API_SCOPE,
-        allowedDomain=ALLOWED_EMAIL_DOMAIN or None,
+        clientId=FRONTEND_CLIENT_ID if FRONTEND_CLIENT_ID else None,
+        authority=AUTHORITY if AUTHORITY else None,
+        scope=AAD_API_SCOPE if AAD_API_SCOPE else None,
+        allowedDomain=ALLOWED_EMAIL_DOMAIN if ALLOWED_EMAIL_DOMAIN else None,
     )
   
 @app.post("/chat", response_model=ChatResponse)  
