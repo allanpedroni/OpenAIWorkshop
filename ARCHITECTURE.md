@@ -199,7 +199,7 @@ graph LR
 
 ### React UI (Recommended for Production)
 
-**Technology:** React 18+ with Material-UI, WebSocket streaming
+**Technology:** React 19 with Material-UI v7, Vite 7, WebSocket streaming
 
 **Functionality:**
 - **Split-panel interface**: Chat on right, internal agent process on left
@@ -215,12 +215,13 @@ graph LR
 - ✅ Professional UI/UX for production deployments
 - ✅ Better for demos and showcasing agent capabilities
 - ✅ Extensible component architecture
+- ⚡ Lightning-fast development with Vite
 
 **Setup:**
 ```bash
 cd agentic_ai/applications/react-frontend
 npm install
-npm start  # Opens at http://localhost:3000
+npm run dev  # Opens at http://localhost:3000
 ```
 
 📚 **[See React UI documentation →](agentic_ai/applications/react-frontend/README.md)**
@@ -654,7 +655,7 @@ uv run python backend.py
 # Terminal 3: React Frontend
 cd react-frontend
 npm install
-npm start
+npm run dev
 # Open http://localhost:3000
 ```
 
@@ -663,8 +664,9 @@ npm start
 # Technology Stack Summary
 
 ## Frontend Technologies
-- **React 18**: Modern UI framework
-- **Material-UI**: Component library
+- **React 19**: Modern UI framework with latest features
+- **Vite 7**: Fast build tool and dev server
+- **Material-UI v7**: React 19-compatible component library
 - **WebSocket**: Real-time streaming
 - **Streamlit**: Python-based simple UI
 

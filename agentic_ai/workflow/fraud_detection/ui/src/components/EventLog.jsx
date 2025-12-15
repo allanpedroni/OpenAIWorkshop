@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect, Fragment } from 'react';
 import {
   Paper,
   Box,
@@ -15,78 +15,15 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import GavelIcon from '@mui/icons-material/Gavel';
 import ErrorIcon from '@mui/icons-material/Error';
+import { getEventIcon, getEventColor, getEventTitle } from '../utils/uiHelpers';
+import { formatTime } from '../utils/helpers';
 
-const getEventIcon = (event) => {
-  switch (event.event_type) {
-    case 'executor_invoked':
-      return <PlayArrowIcon color="primary" />;
-    case 'executor_completed':
-      return <CheckCircleIcon color="success" />;
-    case 'status_change':
-      return <InfoIcon color="info" />;
-    case 'workflow_output':
-      return <CheckCircleIcon color="success" />;
-    default:
-      if (event.type === 'decision_required') {
-        return <GavelIcon color="warning" />;
-      }
-      if (event.type === 'workflow_error') {
-        return <ErrorIcon color="error" />;
-      }
-      return <InfoIcon />;
-  }
-};
-
-const getEventColor = (event) => {
-  switch (event.event_type) {
-    case 'executor_invoked':
-      return 'primary';
-    case 'executor_completed':
-      return 'success';
-    case 'status_change':
-      return 'info';
-    case 'workflow_output':
-      return 'success';
-    default:
-      if (event.type === 'decision_required') {
-        return 'warning';
-      }
-      if (event.type === 'workflow_error') {
-        return 'error';
-      }
-      return 'default';
-  }
-};
-
-const getEventTitle = (event) => {
-  if (event.event_type === 'executor_invoked') {
-    return `${event.executor_id} started`;
-  }
-  if (event.event_type === 'executor_completed') {
-    return `${event.executor_id} completed`;
-  }
-  if (event.event_type === 'status_change') {
-    return `Status: ${event.status}`;
-  }
-  if (event.event_type === 'workflow_output') {
-    return 'Workflow Output';
-  }
-  if (event.type === 'decision_required') {
-    return 'Decision Required';
-  }
-  if (event.type === 'workflow_started') {
-    return 'Workflow Started';
-  }
-  if (event.type === 'workflow_completed') {
-    return 'Workflow Completed';
-  }
-  if (event.type === 'workflow_error') {
-    return 'Error Occurred';
-  }
-  return event.type || 'Event';
-};
-
-function EventLog({ events }) {
+/**
+ * Event log component for displaying workflow events in real-time
+ * @param {Object} props - Component props
+ * @param {Array} props.events - Array of event objects
+ */
+function EventLog({ events = [] }) {
   const listRef = useRef(null);
 
   // Auto-scroll to bottom when new events arrive
@@ -96,15 +33,7 @@ function EventLog({ events }) {
     }
   }, [events]);
 
-  const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
+  const icons = { PlayArrowIcon, CheckCircleIcon, InfoIcon, GavelIcon, ErrorIcon };
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -146,7 +75,7 @@ function EventLog({ events }) {
           </Box>
         ) : (
           events.map((event, index) => (
-            <React.Fragment key={index}>
+            <Fragment key={index}>
               <ListItem
                 sx={{
                   py: 0.75,
@@ -157,7 +86,7 @@ function EventLog({ events }) {
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                  {React.cloneElement(getEventIcon(event), { fontSize: 'small' })}
+                  {getEventIcon(event, icons)}
                 </ListItemIcon>
                 <ListItemText
                   primary={
@@ -181,7 +110,7 @@ function EventLog({ events }) {
                 />
               </ListItem>
               {index < events.length - 1 && <Divider variant="inset" component="li" sx={{ ml: 4 }} />}
-            </React.Fragment>
+            </Fragment>
           ))
         )}
       </List>

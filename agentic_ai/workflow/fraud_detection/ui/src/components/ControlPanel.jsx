@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Paper,
   Box,
@@ -15,34 +15,17 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import WarningIcon from '@mui/icons-material/Warning';
 import ErrorIcon from '@mui/icons-material/Error';
 import InfoIcon from '@mui/icons-material/Info';
+import { getSeverityIcon, getSeverityColor } from '../utils/uiHelpers';
 
-const getSeverityIcon = (severity) => {
-  switch (severity) {
-    case 'high':
-      return <ErrorIcon color="error" />;
-    case 'medium':
-      return <WarningIcon color="warning" />;
-    case 'low':
-      return <InfoIcon color="info" />;
-    default:
-      return <InfoIcon />;
-  }
-};
-
-const getSeverityColor = (severity) => {
-  switch (severity) {
-    case 'high':
-      return 'error';
-    case 'medium':
-      return 'warning';
-    case 'low':
-      return 'info';
-    default:
-      return 'default';
-  }
-};
-
-function ControlPanel({ alerts, onStartWorkflow, workflowRunning, selectedAlert }) {
+/**
+ * Control panel component for selecting alerts and starting workflows
+ * @param {Object} props - Component props
+ * @param {Array} props.alerts - Array of alert objects
+ * @param {Function} props.onStartWorkflow - Callback to start workflow
+ * @param {boolean} props.workflowRunning - Whether workflow is currently running
+ * @param {Object} props.selectedAlert - Currently selected alert object
+ */
+function ControlPanel({ alerts = [], onStartWorkflow, workflowRunning = false, selectedAlert }) {
   const [selectedAlertId, setSelectedAlertId] = useState('');
 
   const handleStartClick = () => {
@@ -70,7 +53,7 @@ function ControlPanel({ alerts, onStartWorkflow, workflowRunning, selectedAlert 
           {alerts.map((alert) => (
             <MenuItem key={alert.alert_id} value={alert.alert_id} sx={{ py: 0.75 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }}>
-                {getSeverityIcon(alert.severity)}
+                {getSeverityIcon(alert.severity, { ErrorIcon, WarningIcon, InfoIcon })}
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="caption" fontWeight="bold" display="block">
                     {alert.alert_id}

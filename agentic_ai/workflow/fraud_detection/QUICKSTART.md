@@ -6,7 +6,7 @@
 
 ```bash
 # Copy sample env file
-cd agentic_ai/workflow/examples/fraud_detection
+cd agentic_ai/workflow/fraud_detection
 cp .env.sample .env
 
 # Edit .env with your Azure OpenAI credentials
@@ -25,7 +25,7 @@ python mcp_service.py
 
 ```bash
 # Terminal 2
-cd agentic_ai/workflow/examples/fraud_detection
+cd agentic_ai/workflow/fraud_detection
 python fraud_detection_workflow.py
 ```
 

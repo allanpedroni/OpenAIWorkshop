@@ -52,7 +52,7 @@ This feature adds UI-based agent selection to the Magentic AI Assistant, allowin
 2. **Start the React Frontend**
    ```bash
    cd agentic_ai/applications/react-frontend
-   npm start
+   npm run dev
    ```
 
 3. **Using Agent Selection**
