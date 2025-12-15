@@ -183,7 +183,7 @@ python mcp_service.py
 ### 3. Run Fraud Detection Workflow
 
 ```bash
-cd agentic_ai/workflow/examples/fraud_detection
+cd agentic_ai/workflow/fraud_detection
 python fraud_detection_workflow.py
 ```
 

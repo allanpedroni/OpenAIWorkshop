@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -9,6 +9,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
 import CustomNode from './CustomNode';
+import { EXECUTOR_STATES } from '../constants/workflow';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -103,6 +104,12 @@ const initialEdges = [
   { id: 'e5-2', source: 'fraud_action_executor', target: 'final_notification_executor' },
 ];
 
+/**
+ * Workflow visualizer component using React Flow
+ * Displays the fraud detection workflow as an interactive graph
+ * @param {Object} props - Component props
+ * @param {Object} props.executorStates - Map of executor IDs to their current states
+ */
 function WorkflowVisualizer({ executorStates = {} }) {
   // Update nodes with current executor states
   const nodes = useMemo(() => {
@@ -110,7 +117,7 @@ function WorkflowVisualizer({ executorStates = {} }) {
       ...node,
       data: {
         ...node.data,
-        status: executorStates[node.id] || 'idle',
+        status: executorStates[node.id] || EXECUTOR_STATES.IDLE,
       },
     }));
   }, [executorStates]);
@@ -119,7 +126,7 @@ function WorkflowVisualizer({ executorStates = {} }) {
   const [edgesState, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Update nodes when executor states change
-  React.useEffect(() => {
+  useEffect(() => {
     setNodes(nodes);
   }, [nodes, setNodes]);
 

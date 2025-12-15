@@ -134,7 +134,7 @@ This example demonstrates a comprehensive fraud detection system using the Agent
 ### Running the Workflow with command line
 
 ```bash
-cd agentic_ai/workflow/examples/fraud_detection
+cd agentic_ai/workflow/fraud_detection
 python fraud_detection_workflow.py
 ```
 
@@ -359,12 +359,14 @@ http://localhost:3000
 ### Technology Stack
 
 **Frontend:**
-- React 18 + Vite
-- React Flow (workflow visualization)
-- Material-UI (components)
-- Axios + WebSocket
+
+- React 19.2 + Vite 7.2
+- React Flow 11.11 (workflow visualization)
+- Material-UI 7.3 (components)
+- WebSocket (real-time updates)
 
 **Backend:**
+
 - FastAPI (async web framework)
 - Agent Framework (workflow engine)
 - Pydantic (data validation)
@@ -373,15 +375,18 @@ http://localhost:3000
 ### Troubleshooting
 
 **WebSocket Connection Failed:**
+
 - Ensure backend is running on port 8001
 - Check browser console for errors
 
 **Workflow Not Starting:**
+
 - Verify MCP server is running (port 8000)
 - Check Azure OpenAI credentials in .env
 - Check backend logs
 
 **UI Not Updating:**
+
 - Check WebSocket connection in DevTools
 - Verify events are being sent from backend
 

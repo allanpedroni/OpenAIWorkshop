@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Paper,
   Box,
@@ -15,14 +15,15 @@ import {
 } from '@mui/material';
 import GavelIcon from '@mui/icons-material/Gavel';
 import SendIcon from '@mui/icons-material/Send';
+import { ACTION_OPTIONS } from '../constants/workflow';
+import { getRiskLevel, getRiskColor } from '../utils/uiHelpers';
 
-const ACTION_OPTIONS = [
-  { value: 'clear', label: 'Clear - No Action Needed', color: 'success' },
-  { value: 'lock_account', label: 'Lock Account', color: 'error' },
-  { value: 'refund_charges', label: 'Refund Charges', color: 'warning' },
-  { value: 'both', label: 'Lock Account & Refund', color: 'error' },
-];
-
+/**
+ * Panel for analyst to make decisions on fraud alerts
+ * @param {Object} props - Component props
+ * @param {Object} props.decision - Decision request object
+ * @param {Function} props.onSubmit - Callback to submit decision
+ */
 function AnalystDecisionPanel({ decision, onSubmit }) {
   const [selectedAction, setSelectedAction] = useState(
     decision.data?.recommended_action || 'clear'
@@ -38,20 +39,6 @@ function AnalystDecisionPanel({ decision, onSubmit }) {
       analyst_notes: notes || 'Analyst decision from UI',
       analyst_id: 'analyst_ui',
     });
-  };
-
-  const getRiskColor = (score) => {
-    if (score >= 0.8) return 'error';
-    if (score >= 0.6) return 'warning';
-    if (score >= 0.3) return 'info';
-    return 'success';
-  };
-
-  const getRiskLevel = (score) => {
-    if (score >= 0.8) return 'Critical';
-    if (score >= 0.6) return 'High';
-    if (score >= 0.3) return 'Medium';
-    return 'Low';
   };
 
   return (
