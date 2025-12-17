@@ -1,9 +1,6 @@
 name: Link Check
 
 on:
-  pull_request:
-  push:
-  workflow_dispatch:
 
 jobs:
   link-check:
