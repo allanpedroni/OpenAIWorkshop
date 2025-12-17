@@ -139,7 +139,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
+      
       - name: Azure OIDC Login
         uses: azure/login@v2
         with:
