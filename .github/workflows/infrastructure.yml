@@ -1,0 +1,219 @@
+name: OpenAI Workshop Infrastructure Deployment and Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        default: dev
+        required: true
+      iac-tool:
+        description: "Choose your infrastructure as code tool"
+        type: choice
+        options:
+        - tf
+        - bicep
+        default: tf
+        required: true
+  pull_request:
+    branches:
+      - main
+      - int-agentic
+
+  push:
+    branches:
+      - tjs-infra-as-code
+
+jobs:
+  tf:
+    name: Terraform Deployment
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'tf' }}
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      MODEL_ENDPOINT: ${{ steps.terraform.outputs.MODEL_ENDPOINT }}
+      MCP_ACA_URL: ${{ steps.terraform.outputs.MCP_ACA_URL }}
+      BACKEND_API_ENDPOINT: ${{ steps.terraform.outputs.BACKEND_API_ENDPOINT }}
+      KEY_VAULT_NAME: ${{ steps.terraform.outputs.KEY_VAULT_NAME }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Setup
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init/Plan/Apply
+        id: terraform
+        run: |
+          cd infra/terraform
+          export ARM_USE_OIDC=true
+          export ARM_CLIENT_ID="${{ vars.AZURE_CLIENT_ID }}"
+          export ARM_TENANT_ID="${{ vars.AZURE_TENANT_ID }}"
+          export ARM_SUBSCRIPTION_ID="${{ vars.AZURE_SUBSCRIPTION_ID }}"
+
+          terraform init -backend-config="resource_group_name=${TFSTATE_RG}" \
+                         -backend-config="key=${TFSTATE_KEY}" -backend-config="storage_account_name=${TFSTATE_ACCOUNT}" \
+                         -backend-config="container_name=${TFSTATE_CONTAINER}"
+          terraform plan -out tfplan \
+            -var project_name=${{ github.event.repository.name }} \
+            -var environment=${{ github.environment }} \
+            -var tenant_id=${{ vars.AZURE_TENANT_ID }} \
+            -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
+            -var acr_name=${{ vars.ACR_NAME }} \
+            -var location=${{ vars.AZ_REGION }} \
+            -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
+            -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
+            -var iteration=${{ github.event.inputs.environment == 'dev' && '${GITHUB_SHA:0:7}' || vars.ITERATION }}
+
+          terraform apply -auto-approve tfplan
+
+          output=$(terraform output -raw openai_endpoint 2>/dev/null || true)
+          echo "MODEL_ENDPOINT=$output" >> $GITHUB_OUTPUT
+          mcp_aca_url=$(terraform output -raw mcp_aca_url 2>/dev/null || true)
+          echo "MCP_ACA_URL=$mcp_aca_url" >> $GITHUB_OUTPUT
+          be_aca_url=$(terraform output -raw be_aca_url 2>/dev/null || true)
+          echo "BACKEND_API_ENDPOINT=$be_aca_url" >> $GITHUB_OUTPUT
+
+          key_vault_name=$(terraform output -raw key_vault_name 2>/dev/null || true)
+          echo "KEY_VAULT_NAME=$key_vault_name" >> $GITHUB_OUTPUT
+        env:
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
+          TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ github.ref_name }}.tfstate"
+
+  bicep:
+      runs-on: ubuntu-latest
+      environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+      if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'bicep' }}
+      permissions:
+        id-token: write
+        contents: read    
+
+      steps:
+        - uses: actions/checkout@v6
+
+        - name: Azure OIDC Login
+          uses: azure/login@v2
+          with:
+            client-id: ${{ vars.AZURE_CLIENT_ID }}
+            tenant-id: ${{ vars.AZURE_TENANT_ID }}
+            subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Bicep Install
+          uses: azure/setup-bicep@v1
+          with:
+            version: 'latest'
+
+        - name: Bicep Build and Deploy
+          run: |
+            cd infra/bicep
+            az deployment group create \
+              --resource-group ${{ vars.BICEP_DEPLOYMENT_RG }} \
+              --template-file main.bicep \
+              --parameters projectName=${{ github.event.repository.name }} \
+              --parameters location=${{ vars.AZ_REGION }} \
+              --parameters acrName=${{ vars.ACR_NAME }}   
+          env:
+            BICEP_DEPLOYMENT_RG: ${{ vars.BICEP_DEPLOYMENT_RG }}
+
+  test_prep:
+    name: Integration Test Preparation and Runs
+    needs: [tf, bicep]
+    if: always() && (needs.tf.result == 'success' || needs.bicep.result == 'success')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read    
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          
+      - name: Run integration tests prep        
+        run: |
+          pip install -r tests/requirements.txt
+
+          # For some reason the backend doesn't seem to like to respond right away after deployment. Adding a sleep to see what we can do:
+          sleep 60
+        env:
+          MODEL_ENDPOINT: ${{ needs.tf.outputs.MODEL_ENDPOINT }}
+
+      - name: Run integration tests
+        run: pytest -m "integration" tests/
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RG }}
+          MODEL_ENDPOINT: ${{ needs.tf.outputs.MODEL_ENDPOINT }}
+          MCP_ENDPOINT: ${{ needs.tf.outputs.MCP_ACA_URL }}
+          BACKEND_API_ENDPOINT: ${{ needs.tf.outputs.BACKEND_API_ENDPOINT }}
+          KEYVAULT_NAME: ${{ needs.tf.outputs.KEY_VAULT_NAME }}
+          MODEL_API_KEY_SECRET_NAME: "AZURE-OPENAI-API-KEY"
+
+  terraform_destroy:
+    name: Terraform Destroy
+    needs: [tf, test_prep]
+    if: always() && (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'tf' && (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev') == 'dev' && needs.tf.result == 'success' && needs.test_prep.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Setup
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Destroy
+        run: |
+          cd infra/terraform
+          export ARM_USE_OIDC=true
+          export ARM_CLIENT_ID="${{ vars.AZURE_CLIENT_ID }}"
+          export ARM_TENANT_ID="${{ vars.AZURE_TENANT_ID }}"
+          export ARM_SUBSCRIPTION_ID="${{ vars.AZURE_SUBSCRIPTION_ID }}"
+
+          terraform init -backend-config="resource_group_name=${TFSTATE_RG}" \
+                         -backend-config="key=${TFSTATE_KEY}" -backend-config="storage_account_name=${TFSTATE_ACCOUNT}" \
+                         -backend-config="container_name=${TFSTATE_CONTAINER}"
+          
+          terraform destroy -auto-approve \
+            -var project_name=${{ github.event.repository.name }} \
+            -var tenant_id=${{ vars.AZURE_TENANT_ID }} \
+            -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
+            -var acr_name=${{ vars.ACR_NAME }} \
+            -var location=${{ vars.AZ_REGION }} \
+            -var environment=${{ github.environment }} \
+            -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
+            -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
+            -var iteration=${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev') == 'dev' && '${GITHUB_SHA:0:7}' || vars.ITERATION }}
+        env:
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
+          TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ github.ref_name }}.tfstate"
+
