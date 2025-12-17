@@ -40,8 +40,8 @@ COPY applications/backend.py applications/utils.py ./
 COPY agents/agent_framework /app/agents/agent_framework
 COPY agents/base_agent.py /app/agents/base_agent.py
 
-# Copy built frontend from previous stage
-COPY --from=frontend-builder /app/frontend/build ./static
+# Copy built frontend from previous stage (Vite outputs to 'dist')
+COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Expose ports
 # Port 7000: Backend API

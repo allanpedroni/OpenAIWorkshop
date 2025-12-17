@@ -11,6 +11,7 @@ export class WebSocketManager {
     this.isAuthEnabled = false;
     this.onMessageCallback = null;
     this.reconnectTimeout = null;
+    this.intentionalClose = false; // Track intentional closes to prevent auto-reconnect
   }
 
   /**
@@ -25,6 +26,7 @@ export class WebSocketManager {
     this.onMessageCallback = onMessage;
     this.accessToken = accessToken;
     this.isAuthEnabled = isAuthEnabled;
+    this.intentionalClose = false; // Reset flag on new connection
 
     this.ws = new WebSocket(WS_URL);
 
@@ -50,10 +52,12 @@ export class WebSocketManager {
 
     this.ws.onclose = () => {
       console.log('WebSocket disconnected');
-      // Reconnect after delay
-      this.reconnectTimeout = setTimeout(() => {
-        this.connect(this.sessionId, this.onMessageCallback, this.accessToken, this.isAuthEnabled);
-      }, WS_RECONNECT_DELAY);
+      // Only reconnect if this was not an intentional close
+      if (!this.intentionalClose) {
+        this.reconnectTimeout = setTimeout(() => {
+          this.connect(this.sessionId, this.onMessageCallback, this.accessToken, this.isAuthEnabled);
+        }, WS_RECONNECT_DELAY);
+      }
     };
   }
 
@@ -71,6 +75,7 @@ export class WebSocketManager {
    * Close the WebSocket connection
    */
   close() {
+    this.intentionalClose = true; // Mark as intentional to prevent auto-reconnect
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
