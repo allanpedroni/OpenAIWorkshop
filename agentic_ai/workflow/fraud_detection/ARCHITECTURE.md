@@ -817,7 +817,7 @@ WARN: Checkpoint resolution delays
 ### Development
 ```
 Local Machine:
-├─ Frontend: npm run dev (Vite) → localhost:5173
+├─ Frontend: npm run dev (Vite) → localhost:3000
 ├─ Backend: uvicorn backend:app → localhost:8001
 └─ MCP Server: uvicorn mcp_service:app → localhost:8000
 ```

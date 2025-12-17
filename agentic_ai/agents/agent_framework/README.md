@@ -100,8 +100,8 @@ cd agentic_ai/applications/react-frontend
 # First time only: Install dependencies
 npm install
 
-# Start development server
-npm start
+# Start development server (powered by Vite)
+npm run dev
 
 # App opens at http://localhost:3000
 ```
@@ -112,7 +112,7 @@ npm start
 
 Create `react-frontend/.env` if you need to change the backend URL:
 ```bash
-REACT_APP_BACKEND_URL=http://localhost:7000
+VITE_BACKEND_URL=http://localhost:7000
 ```
 
 **Troubleshooting:**
@@ -472,9 +472,9 @@ uv run python mcp_service.py
 cd agentic_ai/applications
 uv run python backend.py
 
-# Start React frontend
+# Start React frontend (powered by Vite)
 cd react-frontend
-npm start
+npm run dev
 ```
 
 📚 **[React Frontend Documentation →](../../applications/react-frontend/README.md)**

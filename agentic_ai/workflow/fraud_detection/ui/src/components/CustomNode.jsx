@@ -1,23 +1,15 @@
-import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { Box, Typography, Paper, Chip } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import CircleIcon from '@mui/icons-material/Circle';
+import { getNodeStatusColor, getStatusLabel } from '../utils/uiHelpers';
 
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'running':
-      return { bg: '#1976d2', text: '#ffffff' };
-    case 'completed':
-      return { bg: '#4caf50', text: '#ffffff' };
-    case 'error':
-      return { bg: '#f44336', text: '#ffffff' };
-    default:
-      return { bg: '#ffffff', text: '#000000' };
-  }
-};
-
+/**
+ * Gets the appropriate icon for node status
+ * @param {string} status - Node status
+ * @returns {JSX.Element} Icon component
+ */
 const getStatusIcon = (status) => {
   switch (status) {
     case 'running':
@@ -29,21 +21,13 @@ const getStatusIcon = (status) => {
   }
 };
 
-const getStatusLabel = (status) => {
-  switch (status) {
-    case 'running':
-      return 'Running';
-    case 'completed':
-      return 'Completed';
-    case 'error':
-      return 'Error';
-    default:
-      return 'Idle';
-  }
-};
-
-function CustomNode({ data }) {
-  const statusColor = getStatusColor(data.status);
+/**
+ * Custom node component for React Flow workflow visualization
+ * @param {Object} props - Component props
+ * @param {Object} props.data - Node data object
+ */
+function CustomNode({ data = {} }) {
+  const statusColor = getNodeStatusColor(data.status);
   const isActive = data.status === 'running';
 
   return (

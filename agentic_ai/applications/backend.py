@@ -234,11 +234,16 @@ app.add_middleware(
 )
 
 # Serve static files from React build (production mode only)
+# Vite outputs to 'dist/' with assets in 'dist/assets/'
+# CRA outputs to 'build/' with assets in 'build/static/'
 STATIC_DIR = Path(__file__).parent / "static"
-STATIC_ASSET_DIR = STATIC_DIR / "static"
+STATIC_ASSET_DIR_VITE = STATIC_DIR / "assets"  # Vite structure
+STATIC_ASSET_DIR_CRA = STATIC_DIR / "static"   # CRA structure
 
-if STATIC_ASSET_DIR.exists():  # CRA build places assets in nested /static directory
-    app.mount("/static", StaticFiles(directory=str(STATIC_ASSET_DIR)), name="static")
+if STATIC_ASSET_DIR_VITE.exists():  # Vite build places assets in /assets directory
+    app.mount("/assets", StaticFiles(directory=str(STATIC_ASSET_DIR_VITE)), name="assets")
+elif STATIC_ASSET_DIR_CRA.exists():  # CRA build places assets in nested /static directory
+    app.mount("/static", StaticFiles(directory=str(STATIC_ASSET_DIR_CRA)), name="static")
 elif STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -407,9 +412,10 @@ async def set_active_agent(req: SetAgentRequest, token: str = Depends(verify_tok
             "current_agent": CURRENT_AGENT_MODULE
         }
     except Exception as e:
+        logging.exception("Failed to load agent:")
         return {
             "status": "error",
-            "message": f"Failed to load agent: {str(e)}"
+            "message": "Failed to load agent."
         }
 
 # ──────────────────────────────────────────────────────────────
@@ -509,6 +515,9 @@ async def ws_chat(ws: WebSocket):
                 await MANAGER.broadcast(session_id, {"type": "error", "message": str(e)})
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        # Handle unexpected disconnections (e.g., client closed connection abruptly)
+        logger.debug("WebSocket connection closed unexpectedly: %s", e)
     finally:
         if connected_session:
             MANAGER.disconnect(connected_session, ws)
