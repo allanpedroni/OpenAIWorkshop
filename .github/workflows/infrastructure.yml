@@ -66,7 +66,7 @@ jobs:
                          -backend-config="container_name=${TFSTATE_CONTAINER}"
           terraform plan -out tfplan \
             -var project_name=${{ github.event.repository.name }} \
-            -var environment=${{ github.environment }} \
+            -var environment=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }} \
             -var tenant_id=${{ vars.AZURE_TENANT_ID }} \
             -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
             -var acr_name=${{ vars.ACR_NAME }} \
@@ -207,7 +207,7 @@ jobs:
             -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
             -var acr_name=${{ vars.ACR_NAME }} \
             -var location=${{ vars.AZ_REGION }} \
-            -var environment=${{ github.environment }} \
+            -var environment=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }} \
             -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
             -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
             -var iteration=${{ (github.event_name != 'workflow_dispatch' && github.base_ref != 'main' && github.base_ref != 'int-agentic') && '${GITHUB_SHA:0:7}' || vars.ITERATION }}
