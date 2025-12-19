@@ -49,3 +49,11 @@ jobs:
     with:
       environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
     secrets: inherit
+
+  destroy-infrastructure:
+    needs: [ deploy-infrastructure ]
+    if: always() && (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'tf' && (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev') == 'dev' && needs.tf.result == 'success' && needs.test_prep.result == 'success'
+    uses: ./.github/workflows/destroy.yml
+    with:
+      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+    secrets: inherit
