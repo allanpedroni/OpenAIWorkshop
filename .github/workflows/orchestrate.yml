@@ -17,7 +17,7 @@ on:
   push:
     branches:
       - tjs-infra-as-code
-
+      
 permissions:
   contents: read
   id-token: write
@@ -33,27 +33,27 @@ jobs:
     needs: preflight
     uses: ./.github/workflows/docker-fastapi.yml
     with:
-      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-infra-as-code' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
     secrets: inherit
 
   build-mcp-container:
     needs: preflight
     uses: ./.github/workflows/docker-mcp.yml
     with:
-      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-infra-as-code' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
     secrets: inherit
 
   deploy-infrastructure:
     needs: [ build-backend-container, build-mcp-container ]
     uses: ./.github/workflows/infrastructure.yml
     with:
-      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-infra-as-code' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
     secrets: inherit
 
   destroy-infrastructure:
     needs: [ deploy-infrastructure ]
-    if: always() && (inputs.target_env == 'dev' || github.ref_name == 'tjs-test-infra') && needs.deploy-infrastructure.result == 'success'
+    if: always() && (github.ref_name == 'tjs-infra-as-code' || (inputs.target_env && inputs.target_env == 'dev')) && needs.deploy-infrastructure.result == 'success'
     uses: ./.github/workflows/destroy.yml
     with:
-      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+      environment: ${{ inputs.target_env || (github.ref_name == 'tjs-infra-as-code' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
     secrets: inherit
