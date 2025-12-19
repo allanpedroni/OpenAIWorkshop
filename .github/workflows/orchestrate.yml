@@ -1,0 +1,50 @@
+name: orchestrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        type: choice
+        description: Environment to deploy
+        options: [dev, test, prod]
+        required: true
+
+  pull_request:
+    branches:
+      - main
+      - int-agentic
+
+  push:
+    branches:
+      - tjs-infra-as-code
+
+env:
+  COMPUTED_ENV: ${{ inputs.target_env || (github.ref_name == 'tjs-test-infra' && 'dev') || (github.ref_name == 'int-agentic' && 'integration') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Full orchestrated run through. Should add unit testing and validation here later."
+
+  build-backend-container:
+    needs: preflight
+    uses: ./.github/workflows/docker-fastapi.yml
+    with:
+      environment: ${{ env.COMPUTED_ENV }}
+    secrets: inherit
+
+  build-mcp-container:
+    needs: preflight
+    uses: ./.github/workflows/docker-mcp.yml
+    with:
+      environment: ${{ env.COMPUTED_ENV }}
+    secrets: inherit
+
+  deploy-infrastructure:
+    needs: [ build-backend-container, build-mcp-container ]
+    uses: ./.github/workflows/infrastructure.yml
+    with:
+      environment: ${{ env.COMPUTED_ENV }}
+    secrets: inherit

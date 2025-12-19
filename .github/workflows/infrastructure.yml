@@ -1,6 +1,16 @@
 name: OpenAI Workshop Infrastructure Deployment and Test
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      iac-tool:
+        type: string
+        required: false
+        default: tf
+
   workflow_dispatch:
     inputs:
       environment:
@@ -15,14 +25,7 @@ on:
         - bicep
         default: tf
         required: true
-  pull_request:
-    branches:
-      - main
-      - int-agentic
-
-  push:
-    branches:
-      - tjs-infra-as-code
+        
 
 jobs:
   tf:
