@@ -18,6 +18,10 @@ on:
     branches:
       - tjs-infra-as-code
 
+permissions:
+  contents: read
+  id-token: write
+
 
 jobs:
   preflight:
