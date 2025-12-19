@@ -17,7 +17,7 @@ on:
   push:
     branches:
       - tjs-infra-as-code
-      
+
 permissions:
   contents: read
   id-token: write
@@ -27,7 +27,17 @@ jobs:
   preflight:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Full orchestrated run through. Should add unit testing and validation here later."
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - run: |
+          echo "Full orchestrated run through. Should add unit testing and validation here later."
+          echo "MCAPS sub disables storage account networking, run a command to ensure the account is reachable."
+          az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
 
   build-backend-container:
     needs: preflight
