@@ -2,7 +2,14 @@
 resource "azurerm_role_assignment" "kv_secrets_camcp" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_container_app.mcp.identity[0].principal_id
+  principal_id         = azurerm_user_assigned_identity.mcp.principal_id
+}
+
+# User Assigned Managed Identity for Backend Container App
+resource "azurerm_user_assigned_identity" "mcp" {
+  name                = "uami-mcp-${var.iteration}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
 }
 
 resource "azurerm_container_app" "mcp" {
@@ -10,11 +17,11 @@ resource "azurerm_container_app" "mcp" {
   container_app_environment_id = azurerm_container_app_environment.cae.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
-
+  
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.mcp.id]
   }
-
 
   ingress {
     target_port      = 8000
