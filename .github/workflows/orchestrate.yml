@@ -52,6 +52,13 @@ jobs:
           echo "MCAPS sub disables storage account networking, run a command to ensure the account is reachable."
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --default-action Allow
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
+          
+          echo "MCAPS sub disables key vault networking, run a command to ensure the key vault is reachable."
+          json=$(az keyvault list --query "[].{name: name, rg: resourceGroup}" | jq .[])
+          name=$(jq -r '.name' <<< $json)
+          rg=$(jq -r '.rg' <<< $json)
+          az keyvault update -g $rg -n $name --default-action allow --public-network-access Enabled
+          
 
 
   build-backend-container:
