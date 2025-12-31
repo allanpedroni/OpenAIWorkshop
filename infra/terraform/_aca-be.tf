@@ -153,4 +153,8 @@ resource "azurerm_container_app" "backend" {
   lifecycle {
     # ignore_changes = []
   }
+
+  depends_on = [
+    azurerm_role_assignment.kv_secrets_cabe
+  ]
 }
