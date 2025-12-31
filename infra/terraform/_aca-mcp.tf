@@ -53,4 +53,8 @@ resource "azurerm_container_app" "mcp" {
   lifecycle {
     ignore_changes = []
   }
+
+  depends_on = [
+    azurerm_role_assignment.kv_secrets_camcp
+  ]
 }
