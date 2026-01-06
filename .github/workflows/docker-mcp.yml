@@ -8,13 +8,19 @@ on:
   pull_request:
     branches: [ main ]
 
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
     PROJECT_NAME: aoaiwkshp-mcp
     PROJECT_SUBPATH: mcp/
-    SPECIFIC_RELEASE_TAG: ${{ vars.SPECIFIC_RELEASE_TAG || '' }}
+    SPECIFIC_RELEASE_TAG: ${{ inputs.environment && format('{0}-latest', inputs.environment) || vars.SPECIFIC_RELEASE_TAG || '' }}
 
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel

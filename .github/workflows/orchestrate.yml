@@ -1,0 +1,146 @@
+name: Orchestrate Full Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        type: choice
+        description: Environment to deploy
+        options: [dev, test, prod]
+        required: true
+
+  pull_request:
+    branches:
+      - main
+      - int-agentic
+
+  push:
+    branches:
+      - tjs-infra-as-code
+
+permissions:
+  contents: read
+  id-token: write
+
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: >-
+      ${{
+        inputs.target_env
+        || (github.event_name == 'pull_request' && (
+             github.base_ref == 'tjs-infra-as-code' && 'dev'
+          || github.base_ref == 'int-agentic'        && 'integration'
+          || github.base_ref == 'main'               && 'prod'
+        ))
+        || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+        || (github.ref_name == 'int-agentic'        && 'integration')
+        || (github.ref_name == 'main'               && 'prod')
+        || 'dev'
+      }}
+    steps:
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - run: |
+          echo "Full orchestrated run through. Should add unit testing and validation here later."
+          echo "MCAPS sub disables storage account networking, run a command to ensure the account is reachable."
+          az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --default-action Allow
+          az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
+          
+          echo "MCAPS sub disables key vault networking, run a command to ensure the key vault is reachable."
+          json=$(az keyvault list --query "[].{name: name, rg: resourceGroup}" | jq .[])
+          name=$(jq -r '.name' <<< $json)
+          rg=$(jq -r '.rg' <<< $json)
+          if [[ -z "$name" || -z "$rg" ]]; then
+            echo "No key vault existing in this sub."
+          else
+            if [[ "$rg" == *"OpenAIWorkshop"* ]]; then
+              echo "We do have an OpenAIWorkshop rg. Assume that this KV is intended for this project"
+              az keyvault update -g $rg -n $name --default-action allow --public-network-access Enabled
+            fi
+          fi
+          
+
+
+  build-backend-container:
+    needs: preflight
+    uses: ./.github/workflows/docker-fastapi.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  build-mcp-container:
+    needs: preflight
+    uses: ./.github/workflows/docker-mcp.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  deploy-infrastructure:
+    needs: [ build-backend-container, build-mcp-container ]
+    uses: ./.github/workflows/infrastructure.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  destroy-infrastructure:
+    needs: [ deploy-infrastructure ]
+    if: always() && (github.ref_name == 'tjs-infra-as-code' || (inputs.target_env && inputs.target_env == 'dev')) && needs.deploy-infrastructure.result == 'success'
+    uses: ./.github/workflows/destroy.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
