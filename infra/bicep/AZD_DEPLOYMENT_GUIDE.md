@@ -72,7 +72,7 @@ After deployment, these are automatically set in your azd environment:
 AZURE_OPENAI_ENDPOINT           # Azure OpenAI endpoint URL
 AZURE_OPENAI_CHAT_DEPLOYMENT    # gpt-5-chat deployment name
 AZURE_OPENAI_EMB_DEPLOYMENT # text-embedding-ada-002 deployment name
-AZURE_COSMOS_ENDPOINT           # Cosmos DB endpoint
+AZURE_COSMOSDB_ENDPOINT           # Cosmos DB endpoint
 AZURE_COSMOS_DATABASE_NAME      # Database name (contoso)
 AZURE_CONTAINER_REGISTRY_NAME   # ACR name
 APPLICATION_URL                 # Deployed application URL

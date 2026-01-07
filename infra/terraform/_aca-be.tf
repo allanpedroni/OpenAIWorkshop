@@ -49,11 +49,10 @@ resource "azurerm_container_app" "backend" {
     }
   }
 
-  # Use placeholder secret - the app will use managed identity for Azure OpenAI
-  # When local_authentication_enabled=true on AI Services, replace with: azurerm_key_vault_secret.aoai_api_key.value
-  secret {
-    name  = "aoai-key"
-    value = "managed-identity-auth-placeholder"
+  # Registry configuration for ACR with managed identity
+  registry {
+    server   = local.acr_login_server
+    identity = azurerm_user_assigned_identity.backend.id
   }
 
   # Cosmos DB key secret (only when not using managed identity)
@@ -71,7 +70,7 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = var.docker_image_backend
+      image  = var.docker_image_backend != "" ? var.docker_image_backend : "${local.acr_login_server}/workshop-app:latest"
       cpu    = 1
       memory = "2Gi"
 
@@ -91,11 +90,6 @@ resource "azurerm_container_app" "backend" {
       }
 
       env {
-        name        = "AZURE_OPENAI_API_KEY"
-        secret_name = "aoai-key"
-      }
-
-      env {
         name  = "AZURE_OPENAI_API_VERSION"
         value = "2025-01-01-preview"
       }
@@ -107,7 +101,7 @@ resource "azurerm_container_app" "backend" {
 
       # ========== Cosmos DB Configuration ==========
       env {
-        name  = "COSMOS_ENDPOINT"
+        name  = "COSMOSDB_ENDPOINT"
         value = azurerm_cosmosdb_account.main.endpoint
       }
 
@@ -214,8 +208,9 @@ resource "azurerm_container_app" "backend" {
 
   depends_on = [
     azurerm_role_assignment.kv_secrets_cabe,
+    azurerm_role_assignment.openai_user_backend,
+    azurerm_role_assignment.acr_pull_backend,
     azurerm_cosmosdb_sql_role_assignment.backend_data_owner,
-    azurerm_cosmosdb_sql_role_assignment.backend_data_contributor,
-    azurerm_key_vault_secret.aoai_api_key
+    azurerm_cosmosdb_sql_role_assignment.backend_data_contributor
   ]
 }

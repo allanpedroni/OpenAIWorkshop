@@ -141,7 +141,7 @@ output AZURE_OPENAI_ENDPOINT string = openai.outputs.endpoint
 output AZURE_OPENAI_CHAT_DEPLOYMENT string = openai.outputs.chatDeploymentName
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = openai.outputs.embeddingDeploymentName
 
-output AZURE_COSMOS_ENDPOINT string = cosmosdb.outputs.endpoint
+output AZURE_COSMOSDB_ENDPOINT string = cosmosdb.outputs.endpoint
 output AZURE_COSMOS_DATABASE_NAME string = cosmosdb.outputs.databaseName
 
 output AZURE_CONTAINER_REGISTRY_NAME string = acr.outputs.registryName

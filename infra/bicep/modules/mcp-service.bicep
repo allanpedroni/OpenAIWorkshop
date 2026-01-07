@@ -39,7 +39,7 @@ var cosmosSecrets = (!useCosmosManagedIdentity && !empty(cosmosDbKey)) ? [
 
 var cosmosEnvSettings = concat([
   {
-    name: 'COSMOS_ENDPOINT'
+    name: 'COSMOSDB_ENDPOINT'
     value: cosmosDbEndpoint
   }
   {

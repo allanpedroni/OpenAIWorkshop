@@ -87,7 +87,7 @@ var cosmosSecretEntries = (!useCosmosManagedIdentity && !empty(cosmosDbKey)) ? [
 
 var cosmosEndpointEnv = !empty(cosmosDbEndpoint) ? [
   {
-    name: 'COSMOS_ENDPOINT'
+    name: 'COSMOSDB_ENDPOINT'
     value: cosmosDbEndpoint
   }
 ] : []

@@ -127,6 +127,8 @@ Write-Host "`n[5/5] Updating Container Apps with new images..." -ForegroundColor
 $McpServiceName = "$BaseName-mcp"
 $AppName = "$BaseName-app"
 
+$ErrorActionPreference = 'Continue'
+
 Write-Host "Updating MCP Service: $McpServiceName" -ForegroundColor Gray
 az containerapp update `
     --resource-group $ResourceGroupName `
@@ -136,6 +138,8 @@ az containerapp update `
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  MCP Service update skipped (container app may not exist yet)" -ForegroundColor Yellow
+} else {
+    Write-Host "  MCP Service updated successfully" -ForegroundColor Green
 }
 
 Write-Host "Updating Application: $AppName" -ForegroundColor Gray
@@ -147,7 +151,11 @@ az containerapp update `
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  Application update skipped (container app may not exist yet)" -ForegroundColor Yellow
+} else {
+    Write-Host "  Application updated successfully" -ForegroundColor Green
 }
+
+$ErrorActionPreference = 'Stop'
 
 Write-Host "`n======================================" -ForegroundColor Cyan
 Write-Host "Deployment Complete!" -ForegroundColor Green

@@ -33,6 +33,12 @@ resource "azurerm_container_app" "mcp" {
     }
   }
 
+  # Registry configuration for ACR with managed identity
+  registry {
+    server   = local.acr_login_server
+    identity = azurerm_user_assigned_identity.mcp.id
+  }
+
   # Cosmos DB key secret (only when not using managed identity)
   dynamic "secret" {
     for_each = var.use_cosmos_managed_identity ? [] : [1]
@@ -49,13 +55,13 @@ resource "azurerm_container_app" "mcp" {
 
     container {
       name   = "mcp"
-      image  = var.docker_image_mcp
+      image  = var.docker_image_mcp != "" ? var.docker_image_mcp : "${local.acr_login_server}/mcp-service:latest"
       cpu    = 0.5
       memory = "1Gi"
 
       # ========== Cosmos DB Configuration ==========
       env {
-        name  = "COSMOS_ENDPOINT"
+        name  = "COSMOSDB_ENDPOINT"
         value = azurerm_cosmosdb_account.main.endpoint
       }
 
@@ -115,6 +121,7 @@ resource "azurerm_container_app" "mcp" {
 
   depends_on = [
     azurerm_role_assignment.kv_secrets_camcp,
+    azurerm_role_assignment.acr_pull_mcp,
     azurerm_cosmosdb_sql_role_assignment.mcp_data_owner,
     azurerm_cosmosdb_sql_role_assignment.mcp_data_contributor
   ]

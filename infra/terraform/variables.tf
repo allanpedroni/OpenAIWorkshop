@@ -106,6 +106,34 @@ variable "enable_private_endpoint" {
 }
 
 # ============================================================================
+# Networking Variables
+# ============================================================================
+
+variable "enable_networking" {
+  description = "Enable VNet integration for Container Apps and private endpoints"
+  type        = bool
+  default     = false
+}
+
+variable "vnet_address_prefix" {
+  description = "Address space for the virtual network"
+  type        = string
+  default     = "10.10.0.0/16"
+}
+
+variable "container_apps_subnet_prefix" {
+  description = "Subnet CIDR for the Container Apps managed environment infrastructure (must be at least /23)"
+  type        = string
+  default     = "10.10.0.0/23"
+}
+
+variable "private_endpoint_subnet_prefix" {
+  description = "Subnet CIDR for private endpoints (Cosmos DB, etc.)"
+  type        = string
+  default     = "10.10.2.0/24"
+}
+
+# ============================================================================
 # Container Registry Variables
 # ============================================================================
 
@@ -179,6 +207,12 @@ variable "tags" {
 # OpenAI Embedding Deployment
 # ============================================================================
 
+variable "create_openai_embedding_deployment" {
+  description = "Create OpenAI embedding model deployment. Set to false to use existing deployment."
+  type        = bool
+  default     = true
+}
+
 variable "openai_embedding_deployment_name" {
   description = "Name of the OpenAI embedding model deployment"
   type        = string
@@ -204,7 +238,7 @@ variable "openai_embedding_model_version" {
 variable "backend_target_port" {
   description = "Target port for the backend container app"
   type        = number
-  default     = 7000
+  default     = 3000
 }
 
 variable "mcp_target_port" {
