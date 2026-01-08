@@ -66,7 +66,7 @@ jobs:
 
           terraform init -backend-config="resource_group_name=${TFSTATE_RG}" \
                          -backend-config="key=${TFSTATE_KEY}" -backend-config="storage_account_name=${TFSTATE_ACCOUNT}" \
-                         -backend-config="container_name=${TFSTATE_CONTAINER}"
+                         -backend-config="container_name=${TFSTATE_CONTAINER}" -backend-config="use_oidc=true" -backend-config="use_azuread_auth=true"
           terraform plan -out tfplan \
             -var project_name=${{ github.event.repository.name }} \
             -var environment=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }} \

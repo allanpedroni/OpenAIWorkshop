@@ -14,11 +14,6 @@ terraform {
       version = "~> 3.4"
     }
   }
-  # Backend configuration - uncomment for CI/CD with remote state
-  backend "azurerm" {
-    use_oidc = true
-    use_azuread_auth = true
-  }
 }
 
 
