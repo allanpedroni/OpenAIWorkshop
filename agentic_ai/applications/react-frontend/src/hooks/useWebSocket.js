@@ -52,7 +52,7 @@ export const useWebSocket = (sessionId, isAuthEnabled, accessToken, authConfigLo
           return {
             ...prev,
             [event.agent_id]: {
-              name: event.agent_id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+              name: event.agent_name || event.agent_id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
               tokens: [],
               complete: false,
               showMessageInInternalProcess: event.show_message_in_internal_process !== false,
