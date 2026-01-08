@@ -7,7 +7,6 @@ variable "location" {
   default = "eastus2"
 }
 variable "tenant_id" { type = string }
-variable "subscription_id" { type = string }
 variable "acr_name" { 
   description = "Name of existing ACR (only used when create_acr = false)"
   type    = string 

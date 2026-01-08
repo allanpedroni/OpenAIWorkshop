@@ -22,7 +22,10 @@ param(
     [switch]$InfraOnly,
     
     [Parameter(Mandatory=$false)]
-    [switch]$PlanOnly
+    [switch]$PlanOnly,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$RemoteBackend
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,7 +58,22 @@ Write-Host "  Backend Container App: $AppName" -ForegroundColor Gray
 Write-Host "`n[1/6] Initializing Terraform..." -ForegroundColor Green
 Push-Location $PSScriptRoot
 try {
-    terraform init -upgrade
+    # If remote backend is specified, use a remote backend. We will ensure that there is a properly configured backend in providers.
+    # If the remote backend is not specified, we default with this interactive script to local state so we move the default config
+    #   to a different file.
+    if ($RemoteBackend) {
+        if (test-path -path providers.tf.remote) {
+            move-item providers.tf providers.tf.local
+            move-item providers.tf.remote providers.tf
+        }
+        terraform init -upgrade -backend-config="resource_group_name=$env:TFSTATE_RG" -backend-config="key=$env:TFSTATE_KEY" -backend-config="storage_account_name=$env:TFSTATE_ACCOUNT" -backend-config="container_name=$env:TFSTATE_CONTAINER"
+    } else {
+        if (test-path -path providers.tf.local) {
+            move-item providers.tf providers.tf.remote
+            move-item providers.tf.local providers.tf
+        }
+        terraform init -upgrade
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Terraform init failed!"
         exit 1
