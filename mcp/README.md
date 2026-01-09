@@ -5,7 +5,52 @@ This repository illustrates how to design and operate production-grade MCP servi
   
 - **Secure by default** and ready for multi-tenant exposure via Azure API Management (APIM).  
 - **Intelligent and agentic**, using Azure OpenAI and Autogen to orchestrate tool calls.  
-- **Advanced in user experience**, including long-running operations with live progress updates.  
+- **Advanced in user experience**, including long-running operations with live progress updates.
+- **Flexible backends**, supporting both SQLite (local) and Cosmos DB (Azure) storage.
+
+---
+
+## Backend Storage Options
+
+The MCP service supports two backend storage options, selected via the `USE_COSMOSDB` environment variable:
+
+### SQLite Backend (Default - Local Development)
+
+```bash
+# Uses SQLite by default (USE_COSMOSDB=false)
+cd mcp
+uv run python mcp_service.py
+```
+
+Create the SQLite database with sample data:
+```bash
+cd mcp/data
+python create_db.py  # Creates contoso.db with 250 customers + 9 scenarios
+```
+
+### Cosmos DB Backend (Azure Deployment)
+
+For production Azure deployments with managed identity authentication:
+
+```bash
+# Set environment variables
+export USE_COSMOSDB=true
+export COSMOSDB_ENDPOINT=https://your-cosmos-account.documents.azure.com:443/
+export COSMOS_DATABASE_NAME=contoso
+
+uv run python mcp_service.py
+```
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `USE_COSMOSDB` | `false` | Enable Cosmos DB backend |
+| `COSMOSDB_ENDPOINT` | - | Cosmos DB account endpoint |
+| `COSMOS_DATABASE_NAME` | `contoso` | Database name |
+| `SEED_ON_STARTUP` | `true` | Auto-seed if containers empty |
+| `FORCE_SEED` | `false` | Force re-seeding |
+| `SEED_CUSTOMER_COUNT` | `250` | Number of customers to seed |
+
+When running in Azure Container Apps with managed identity, no API keys are needed—the service uses `DefaultAzureCredential` which automatically picks up the container's managed identity.
   
 ---  
  

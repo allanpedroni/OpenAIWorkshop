@@ -507,6 +507,82 @@ infra/
 | `openai_model_version` | string | `2025-04-14` | Model version |
 | `create_openai_embedding_deployment` | bool | `false` | Create embedding deployment |
 
+#### MCP Backend & Data Seeding Settings
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `seed_cosmos_data` | bool | `false` | Seed sample data on MCP startup |
+
+---
+
+## MCP Backend Options
+
+The MCP service supports two backend storage options:
+
+### SQLite Backend (Local Development)
+
+For local development, the MCP service uses a local SQLite database (`contoso.db`):
+
+```bash
+# Default - uses SQLite
+cd mcp
+uv run python mcp_service.py
+```
+
+To create the SQLite database with sample data:
+```bash
+cd mcp/data
+python create_db.py  # Creates contoso.db with 250 customers + 9 scenarios
+```
+
+### Cosmos DB Backend (Azure Deployment)
+
+For Azure deployments, the MCP service uses Cosmos DB with managed identity authentication:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `USE_COSMOSDB` | `false` | Set to `true` to use Cosmos DB backend |
+| `COSMOSDB_ENDPOINT` | - | Cosmos DB account endpoint URL |
+| `COSMOS_DATABASE_NAME` | `contoso` | Database name in Cosmos DB |
+| `SEED_ON_STARTUP` | `true` | Automatically seed data if containers are empty |
+| `FORCE_SEED` | `false` | Force re-seeding even if data exists |
+| `SEED_CUSTOMER_COUNT` | `250` | Number of customers to seed |
+
+#### Cosmos DB Containers
+
+The following containers are created automatically:
+
+| Container | Partition Key | Description |
+|-----------|---------------|-------------|
+| `Customers` | `/id` | Customer profiles |
+| `Products` | `/id` | Product catalog |
+| `Subscriptions` | `/customer_id` | Customer subscriptions |
+| `Invoices` | `/subscription_id` | Billing invoices |
+| `Payments` | `/invoice_id` | Payment records |
+| `Promotions` | `/id` | Active promotions |
+| `SecurityLogs` | `/customer_id` | Security audit logs |
+| `Orders` | `/customer_id` | Customer orders |
+| `SupportTickets` | `/customer_id` | Support tickets |
+| `DataUsage` | `/subscription_id` | Data usage records |
+| `ServiceIncidents` | `/subscription_id` | Service incidents |
+| `KnowledgeDocuments` | `/category` | Knowledge base for semantic search |
+
+#### Data Seeding
+
+When `SEED_ON_STARTUP=true` and the Customers container is empty, the MCP service automatically seeds sample data:
+
+- **250 customers** with subscriptions, invoices, payments
+- **9 deterministic scenarios** for testing agent capabilities
+- **Knowledge base documents** for semantic search
+- **Security logs**, support tickets, data usage records
+
+To force re-seeding (e.g., after schema changes):
+```powershell
+az containerapp update --name <mcp-app-name> --resource-group <rg> --set-env-vars "FORCE_SEED=true"
+# Wait for container restart, then remove the flag:
+az containerapp update --name <mcp-app-name> --resource-group <rg> --remove-env-vars "FORCE_SEED"
+```
+
 ---
 
 ## Troubleshooting
