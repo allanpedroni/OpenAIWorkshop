@@ -51,7 +51,10 @@ resource "azurerm_container_app" "mcp" {
 
     container {
       name   = "mcp"
-      image  = var.docker_image_mcp != "" ? var.docker_image_mcp : "${local.acr_login_server}/mcp-service:latest"
+      # Use placeholder image for initial deployment if custom image not specified
+      # After first deployment, update-containers.yml will set the real image
+      # Using Microsoft's quickstart image as a known-good placeholder
+      image  = var.docker_image_mcp != "" ? var.docker_image_mcp : "mcr.microsoft.com/k8se/quickstart:latest"
       cpu    = 0.5
       memory = "1Gi"
 
@@ -112,7 +115,11 @@ resource "azurerm_container_app" "mcp" {
   }
 
   lifecycle {
-    ignore_changes = []
+    # Ignore image changes - managed by update-containers.yml workflow
+    # This prevents Terraform from reverting to placeholder after update-containers sets real image
+    ignore_changes = [
+      template[0].container[0].image
+    ]
   }
 
   depends_on = [

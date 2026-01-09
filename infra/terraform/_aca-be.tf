@@ -63,7 +63,10 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = var.docker_image_backend != "" ? var.docker_image_backend : "${local.acr_login_server}/backend-app:latest"
+      # Use placeholder image for initial deployment if custom image not specified
+      # After first deployment, update-containers.yml will set the real image
+      # Using Microsoft's quickstart image as a known-good placeholder
+      image  = var.docker_image_backend != "" ? var.docker_image_backend : "mcr.microsoft.com/k8se/quickstart:latest"
       cpu    = 1
       memory = "2Gi"
 
@@ -197,7 +200,11 @@ resource "azurerm_container_app" "backend" {
     }
   }
   lifecycle {
-    # ignore_changes = []
+    # Ignore image changes - managed by update-containers.yml workflow
+    # This prevents Terraform from reverting to placeholder after update-containers sets real image
+    ignore_changes = [
+      template[0].container[0].image
+    ]
   }
 
   depends_on = [
