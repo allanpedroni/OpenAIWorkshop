@@ -26,19 +26,7 @@ permissions:
 jobs:
   preflight:
     runs-on: ubuntu-latest
-    environment: >-
-      ${{
-        inputs.target_env
-        || (github.event_name == 'pull_request' && (
-             github.base_ref == 'tjs-infra-as-code' && 'dev'
-          || github.base_ref == 'int-agentic'        && 'integration'
-          || github.base_ref == 'main'               && 'prod'
-        ))
-        || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-        || (github.ref_name == 'int-agentic'        && 'integration')
-        || (github.ref_name == 'main'               && 'prod')
-        || 'dev'
-      }}
+    # environment: removed to use repo-level variables
     steps:
       - name: Azure OIDC Login
         uses: azure/login@v2
@@ -54,8 +42,29 @@ jobs:
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
           
 
-  build-application-container:
+  # Step 1: Deploy infrastructure FIRST (creates ACR, Container Apps, etc.)
+  deploy-infrastructure:
     needs: preflight
+    uses: ./.github/workflows/infrastructure.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  # Step 2: Build containers AFTER infrastructure exists (ACR is now available)
+  build-application-container:
+    needs: deploy-infrastructure
     uses: ./.github/workflows/docker-application.yml
     with:
       environment: >-
@@ -74,7 +83,7 @@ jobs:
     secrets: inherit
 
   build-mcp-container:
-    needs: preflight
+    needs: deploy-infrastructure
     uses: ./.github/workflows/docker-mcp.yml
     with:
       environment: >-
@@ -92,29 +101,10 @@ jobs:
         }}
     secrets: inherit
 
-  deploy-infrastructure:
-    needs: [ build-application-container, build-mcp-container ]
-    uses: ./.github/workflows/infrastructure.yml
-    with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
-    secrets: inherit
-
-  # Update Container Apps with new images after infrastructure is deployed
+  # Step 3: Update Container Apps with new images after builds complete
   update-containers:
-    needs: [ deploy-infrastructure ]
-    if: needs.deploy-infrastructure.result == 'success'
+    needs: [ build-application-container, build-mcp-container ]
+    if: always() && (needs.build-application-container.result == 'success' || needs.build-mcp-container.result == 'success')
     uses: ./.github/workflows/update-containers.yml
     with:
       environment: >-

@@ -31,7 +31,7 @@ jobs:
   build:
     name: Build & Push MCP Image
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
+    # environment: ${{ inputs.environment || 'dev' }}  # Commented out to use repo-level variables
     permissions:
       id-token: write
       contents: read

@@ -31,7 +31,7 @@ jobs:
   tf:
     name: Terraform Deployment
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+    # environment: removed to use repo-level variables
     if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'tf' }}
     permissions:
       id-token: write
@@ -95,7 +95,7 @@ jobs:
 
   bicep:
       runs-on: ubuntu-latest
-      environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+      # environment: removed to use repo-level variables
       if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'bicep' }}
       permissions:
         id-token: write
@@ -133,7 +133,7 @@ jobs:
     needs: [tf, bicep]
     if: always() && (needs.tf.result == 'success' || needs.bicep.result == 'success')
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }}
+    # environment: removed to use repo-level variables
     permissions:
       id-token: write
       contents: read    
