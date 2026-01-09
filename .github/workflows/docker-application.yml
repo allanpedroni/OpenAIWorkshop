@@ -1,12 +1,8 @@
 name: Build and Push Docker Image for Backend Application
 
 on:
-  pull_request:
-    branches: [ main, int-agentic ]
-    paths:
-      - 'agentic_ai/**'
-      - '.github/workflows/docker-application.yml'
-
+  # Only run via workflow_call from orchestrate.yml or manual dispatch
+  # Do not run automatically on pull_request - orchestrate.yml handles the full pipeline
   workflow_call:
     inputs:
       environment:
