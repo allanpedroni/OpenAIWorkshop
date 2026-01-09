@@ -157,8 +157,8 @@ if (-not $SkipBuild) {
     
     Push-Location $PSScriptRoot/../../mcp
     try {
-        docker build -t "$AcrLoginServer/mcp-service:latest" -f Dockerfile .
-        docker push "$AcrLoginServer/mcp-service:latest"
+        docker build -t "$AcrLoginServer/mcp-service:$Environment-latest" -t "$AcrLoginServer/mcp-service:latest" -f Dockerfile .
+        docker push "$AcrLoginServer/mcp-service" --all-tags
         
         if ($LASTEXITCODE -ne 0) {
             Write-Error "MCP Service image build/push failed!"
@@ -171,13 +171,13 @@ if (-not $SkipBuild) {
     
     Write-Host "MCP Service image built and pushed successfully!" -ForegroundColor Green
     
-    # Build and Push Application Image
-    Write-Host "`nBuilding and pushing Application image..." -ForegroundColor Green
+    # Build and Push Backend Application Image
+    Write-Host "`nBuilding and pushing Backend Application image..." -ForegroundColor Green
     
     Push-Location $PSScriptRoot/../../agentic_ai
     try {
-        docker build -t "$AcrLoginServer/workshop-app:latest" -f applications/Dockerfile .
-        docker push "$AcrLoginServer/workshop-app:latest"
+        docker build -t "$AcrLoginServer/backend-app:$Environment-latest" -t "$AcrLoginServer/backend-app:latest" -f applications/Dockerfile .
+        docker push "$AcrLoginServer/backend-app" --all-tags
         
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Application image build/push failed!"
@@ -188,7 +188,7 @@ if (-not $SkipBuild) {
         Pop-Location
     }
     
-    Write-Host "Application image built and pushed successfully!" -ForegroundColor Green
+    Write-Host "Backend Application image built and pushed successfully!" -ForegroundColor Green
 } else {
     Write-Host "`nSkipping container builds (--SkipBuild)" -ForegroundColor Yellow
 }
@@ -202,7 +202,7 @@ Write-Host "Updating MCP Service: $McpServiceName" -ForegroundColor Gray
 az containerapp update `
     --resource-group $ResourceGroupName `
     --name $McpServiceName `
-    --image "$AcrLoginServer/mcp-service:latest" `
+    --image "$AcrLoginServer/mcp-service:$Environment-latest" `
     --output none 2>$null
 
 if ($LASTEXITCODE -ne 0) {
@@ -211,11 +211,11 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "  MCP Service updated successfully" -ForegroundColor Green
 }
 
-Write-Host "Updating Application: $AppName" -ForegroundColor Gray
+Write-Host "Updating Backend Application: $AppName" -ForegroundColor Gray
 az containerapp update `
     --resource-group $ResourceGroupName `
     --name $AppName `
-    --image "$AcrLoginServer/workshop-app:latest" `
+    --image "$AcrLoginServer/backend-app:$Environment-latest" `
     --output none 2>$null
 
 if ($LASTEXITCODE -ne 0) {

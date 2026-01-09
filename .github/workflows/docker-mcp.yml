@@ -1,12 +1,11 @@
-# This is a basic workflow to help you get started with Actions
+name: Build and Push Docker Image for MCP Service
 
-name: Build and Push Docker Image for MCP
-
-# Controls when the action will run. 
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
   pull_request:
-    branches: [ main ]
+    branches: [ main, int-agentic ]
+    paths:
+      - 'mcp/**'
+      - '.github/workflows/docker-mcp.yml'
 
   workflow_call:
     inputs:
@@ -14,51 +13,54 @@ on:
         type: string
         required: true
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, integration, prod]
+        default: dev
 
 env:
-    PROJECT_NAME: aoaiwkshp-mcp
-    PROJECT_SUBPATH: mcp/
-    SPECIFIC_RELEASE_TAG: ${{ inputs.environment && format('{0}-latest', inputs.environment) || vars.SPECIFIC_RELEASE_TAG || '' }}
+  IMAGE_NAME: mcp-service
+  PROJECT_SUBPATH: mcp/
+  IMAGE_TAG: ${{ inputs.environment && format('{0}-latest', inputs.environment) || 'latest' }}
 
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
+    name: Build & Push MCP Image
     runs-on: ubuntu-latest
-    # Only run if the required variables exist
-    if: vars.REGISTRY_LOGIN_SERVER != '' && vars.REGISTRY_LOGIN_SERVER != null
+    environment: ${{ inputs.environment || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
-        
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
         with:
-          registry: ${{ vars.REGISTRY_LOGIN_SERVER }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build registry prefix
-        id: prefix
+      - name: Login to Azure Container Registry
         run: |
-          if [[ "${{ vars.REGISTRY_LOGIN_SERVER }}" == *"docker.io"* ]]; then
-            echo "prefix=${{ vars.REGISTRY_LOGIN_SERVER }}/${{ secrets.REGISTRY_USERNAME }}/${{ env.PROJECT_NAME }}" >> $GITHUB_OUTPUT
-          else
-            echo "prefix=${{ vars.REGISTRY_LOGIN_SERVER }}/${{ env.PROJECT_NAME }}" >> $GITHUB_OUTPUT
-          fi
+          az acr login --name ${{ vars.ACR_NAME }}
 
-
-      - run: |
-            if [ -z "${{ env.SPECIFIC_RELEASE_TAG }}" ]; then
-                docker build ${{ env.PROJECT_SUBPATH }} -t ${{ steps.prefix.outputs.prefix }}:${{ github.sha }} -t ${{ steps.prefix.outputs.prefix }}:latest
-            else
-                docker build ${{ env.PROJECT_SUBPATH }} -t ${{ steps.prefix.outputs.prefix }}:${{ env.SPECIFIC_RELEASE_TAG }} -t ${{ steps.prefix.outputs.prefix }}:latest
-            fi
-
-      - run: |
-          docker push ${{ steps.prefix.outputs.prefix }} --all-tags
+      - name: Build and Push Image
+        run: |
+          ACR_SERVER="${{ vars.ACR_NAME }}.azurecr.io"
+          
+          # Build with both SHA tag and environment tag
+          docker build ${{ env.PROJECT_SUBPATH }} \
+            -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
+            -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:latest"
+          
+          # Push all tags
+          docker push "${ACR_SERVER}/${{ env.IMAGE_NAME }}" --all-tags
+          
+          echo "✅ Pushed: ${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"

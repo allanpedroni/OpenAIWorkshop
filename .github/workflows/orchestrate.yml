@@ -111,9 +111,31 @@ jobs:
         }}
     secrets: inherit
 
-  destroy-infrastructure:
+  # Update Container Apps with new images after infrastructure is deployed
+  update-containers:
     needs: [ deploy-infrastructure ]
-    if: always() && (github.ref_name == 'tjs-infra-as-code' || (inputs.target_env && inputs.target_env == 'dev')) && needs.deploy-infrastructure.result == 'success'
+    if: needs.deploy-infrastructure.result == 'success'
+    uses: ./.github/workflows/update-containers.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  # Optional: Destroy infrastructure (only for test branches)
+  destroy-infrastructure:
+    needs: [ update-containers ]
+    if: always() && (github.ref_name == 'tjs-infra-as-code' || (inputs.target_env && inputs.target_env == 'dev')) && needs.update-containers.result == 'success'
     uses: ./.github/workflows/destroy.yml
     with:
       environment: >-

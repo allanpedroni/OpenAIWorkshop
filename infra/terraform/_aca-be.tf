@@ -63,7 +63,7 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = var.docker_image_backend != "" ? var.docker_image_backend : "${local.acr_login_server}/workshop-app:latest"
+      image  = var.docker_image_backend != "" ? var.docker_image_backend : "${local.acr_login_server}/backend-app:latest"
       cpu    = 1
       memory = "2Gi"
 
