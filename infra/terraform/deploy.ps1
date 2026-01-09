@@ -1,5 +1,12 @@
 # Terraform Infrastructure Deployment Script for OpenAI Workshop
 # This script deploys infrastructure via Terraform, builds Docker images, pushes to ACR, and updates Container Apps
+#
+# Usage:
+#   .\deploy.ps1                           # Full deployment with defaults
+#   .\deploy.ps1 -PlanOnly                 # Only plan, don't apply
+#   .\deploy.ps1 -InfraOnly                # Deploy infra, skip container builds
+#   .\deploy.ps1 -SkipBuild                # Deploy but skip container builds
+#   .\deploy.ps1 -SeedCosmosData           # Seed Cosmos DB with sample data after deployment
 
 param(
     [Parameter(Mandatory=$false)]
@@ -16,6 +23,9 @@ param(
     [string]$Iteration = '002',
     
     [Parameter(Mandatory=$false)]
+    [string]$SubscriptionId = '840b5c5c-3f4a-459a-94fc-6bad2a969f9d',
+    
+    [Parameter(Mandatory=$false)]
     [switch]$SkipBuild,
     
     [Parameter(Mandatory=$false)]
@@ -25,27 +35,38 @@ param(
     [switch]$PlanOnly,
 
     [Parameter(Mandatory=$false)]
-    [switch]$RemoteBackend,
-
-    [Parameter(Mandatory=$false)]
     [switch]$SeedCosmosData
 )
 
 $ErrorActionPreference = 'Stop'
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "Azure OpenAI Workshop - Terraform Deployment" -ForegroundColor Cyan
+Write-Host "Azure OpenAI Workshop - Local Deployment" -ForegroundColor Cyan
 Write-Host "Environment: $Environment" -ForegroundColor Cyan
 Write-Host "Location: $Location" -ForegroundColor Cyan
 Write-Host "Iteration: $Iteration" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
-# Get current Azure context
-$SubscriptionId = (az account show --query id -o tsv)
-$TenantId = (az account show --query tenantId -o tsv)
-
+# Set ARM_SUBSCRIPTION_ID for Terraform
+$env:ARM_SUBSCRIPTION_ID = $SubscriptionId
 Write-Host "`nUsing Subscription: $SubscriptionId" -ForegroundColor Yellow
+
+# Verify Azure CLI is logged in
+$account = az account show 2>$null | ConvertFrom-Json
+if (-not $account) {
+    Write-Error "Not logged in to Azure CLI. Please run: az login"
+    exit 1
+}
+$TenantId = $account.tenantId
 Write-Host "Using Tenant: $TenantId" -ForegroundColor Yellow
+Write-Host "Logged in as: $($account.user.name)" -ForegroundColor Yellow
+
+# Set correct subscription
+az account set --subscription $SubscriptionId
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to set subscription. Check if you have access to: $SubscriptionId"
+    exit 1
+}
 
 # Variables derived from Terraform naming conventions
 $ResourceGroupName = "rg-$ProjectName-$Environment-$Iteration"
@@ -57,26 +78,18 @@ Write-Host "  Resource Group: $ResourceGroupName" -ForegroundColor Gray
 Write-Host "  MCP Container App: $McpServiceName" -ForegroundColor Gray
 Write-Host "  Backend Container App: $AppName" -ForegroundColor Gray
 
-# Step 1: Initialize Terraform
-Write-Host "`n[1/6] Initializing Terraform..." -ForegroundColor Green
+# Step 1: Initialize Terraform with LOCAL backend
+Write-Host "`n[1/6] Initializing Terraform (local state)..." -ForegroundColor Green
 Push-Location $PSScriptRoot
 try {
-    # If remote backend is specified, use a remote backend. We will ensure that there is a properly configured backend in providers.
-    # If the remote backend is not specified, we default with this interactive script to local state so we move the default config
-    #   to a different file.
-    if ($RemoteBackend) {
-        if (test-path -path providers.tf.remote) {
-            move-item providers.tf providers.tf.local
-            move-item providers.tf.remote providers.tf
-        }
-        terraform init -upgrade -backend-config="resource_group_name=$env:TFSTATE_RG" -backend-config="key=$env:TFSTATE_KEY" -backend-config="storage_account_name=$env:TFSTATE_ACCOUNT" -backend-config="container_name=$env:TFSTATE_CONTAINER"
-    } else {
-        if (test-path -path providers.tf.local) {
-            move-item providers.tf providers.tf.remote
-            move-item providers.tf.local providers.tf
-        }
-        terraform init -upgrade
+    # Ensure we're using local backend (not remote)
+    if (Test-Path -Path providers.tf.local) {
+        Move-Item providers.tf providers.tf.remote -Force
+        Move-Item providers.tf.local providers.tf -Force
+        Write-Host "  Switched to local backend" -ForegroundColor Gray
     }
+    
+    terraform init -upgrade
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Terraform init failed!"
         exit 1
