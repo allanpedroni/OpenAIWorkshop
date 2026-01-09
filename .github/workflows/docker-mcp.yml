@@ -46,15 +46,27 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Determine ACR Name
+        id: acr
+        run: |
+          # Construct ACR name matching Terraform pattern: {project}{env}acr{iteration}
+          PROJECT="${{ vars.PROJECT_NAME || 'OpenAIWorkshop' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
+          ITERATION="${{ vars.ITERATION || '002' }}"
+          ACR_NAME="${PROJECT}${ENV}acr${ITERATION}"
+          echo "name=${ACR_NAME}" >> $GITHUB_OUTPUT
+          echo "server=${ACR_NAME}.azurecr.io" >> $GITHUB_OUTPUT
+          echo "Using ACR: ${ACR_NAME}"
+
       - name: Login to Azure Container Registry
         run: |
           # Get ACR access token using the OIDC-authenticated Azure CLI session
-          ACR_TOKEN=$(az acr login --name ${{ vars.ACR_NAME }} --expose-token --query accessToken -o tsv)
-          echo "$ACR_TOKEN" | docker login ${{ vars.ACR_NAME }}.azurecr.io --username 00000000-0000-0000-0000-000000000000 --password-stdin
+          ACR_TOKEN=$(az acr login --name ${{ steps.acr.outputs.name }} --expose-token --query accessToken -o tsv)
+          echo "$ACR_TOKEN" | docker login ${{ steps.acr.outputs.server }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       - name: Build and Push Image
         run: |
-          ACR_SERVER="${{ vars.ACR_NAME }}.azurecr.io"
+          ACR_SERVER="${{ steps.acr.outputs.server }}"
           
           # Build with both SHA tag and environment tag
           docker build ${{ env.PROJECT_SUBPATH }} \
@@ -66,3 +78,4 @@ jobs:
           docker push "${ACR_SERVER}/${{ env.IMAGE_NAME }}" --all-tags
           
           echo "✅ Pushed: ${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "ACR: ${{ steps.acr.outputs.name }}"

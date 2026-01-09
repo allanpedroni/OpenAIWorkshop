@@ -63,8 +63,11 @@ jobs:
           echo "mcp_app=ca-mcp-${ITERATION}" >> $GITHUB_OUTPUT
           echo "backend_app=ca-be-${ITERATION}" >> $GITHUB_OUTPUT
           
-          # ACR server
-          echo "acr_server=${{ vars.ACR_NAME }}.azurecr.io" >> $GITHUB_OUTPUT
+          # ACR name follows Terraform pattern: {project}{env}acr{iteration}
+          ACR_NAME="${PROJECT}${ENV}acr${ITERATION}"
+          echo "acr_name=${ACR_NAME}" >> $GITHUB_OUTPUT
+          echo "acr_server=${ACR_NAME}.azurecr.io" >> $GITHUB_OUTPUT
+          echo "Using ACR: ${ACR_NAME}"
 
       - name: Update MCP Container App
         continue-on-error: true
