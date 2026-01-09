@@ -14,7 +14,7 @@
 #     payload = {
 #         "messages": [{"role": "system", "content": "You are an helpful assistant."}, {"role": "user", "content": "What are 3 things to visit in Seattle?"}],
 #         "max_tokens": 1000,
-#         "model": "gpt-4.1"
+#         "model": "gpt-5.2-chat"
 #     }
 #     resp = requests.post(model_endpoint, headers=headers,
 #                          json=payload, timeout=10)

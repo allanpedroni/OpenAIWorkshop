@@ -27,25 +27,25 @@ variable "create_openai_deployment" {
 variable "openai_deployment_name" {
   description = "Name of the OpenAI model deployment"
   type        = string
-  default     = "gpt-4.1"
+  default     = "gpt-5.2-chat"
 }
 
 variable "openai_model_name" {
   description = "OpenAI model name to deploy"
   type        = string
-  default     = "gpt-4.1"
+  default     = "gpt-5.2-chat"
 }
 
 variable "openai_model_version" {
   description = "OpenAI model version"
   type        = string
-  default     = "2025-04-14"
+  default     = "2025-12-11"
 }
 
 variable "openai_deployment_capacity" {
   description = "Capacity (TPM in thousands) for OpenAI deployment"
   type        = number
-  default     = 10
+  default     = 50
 }
 
 variable "iteration" {
