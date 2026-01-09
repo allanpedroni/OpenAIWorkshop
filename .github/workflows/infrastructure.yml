@@ -55,6 +55,14 @@ jobs:
       - name: Terraform Setup
         uses: hashicorp/setup-terraform@v3
 
+      - name: Sanitize branch name for state key
+        id: sanitize
+        run: |
+          # Replace / and other invalid chars with - for valid Azure blob name
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          SAFE_BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "branch=$SAFE_BRANCH" >> $GITHUB_OUTPUT
+
       - name: Terraform Init/Plan/Apply
         id: terraform
         run: |
@@ -91,7 +99,8 @@ jobs:
           TFSTATE_RG: ${{ vars.TFSTATE_RG }}
           TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
           TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
-          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ github.ref_name }}.tfstate"
+          # Use sanitized branch name for valid Azure blob name
+          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ steps.sanitize.outputs.branch }}.tfstate"
 
   bicep:
       runs-on: ubuntu-latest

@@ -51,20 +51,20 @@ jobs:
       - name: Determine Resource Names
         id: names
         run: |
-          # Resource naming follows pattern: {project}-{env}-{resource}
-          PROJECT="${{ vars.PROJECT_NAME || 'openaiworkshop' }}"
-          ENV="${{ inputs.environment }}"
-          ITERATION="${{ vars.ITERATION || '001' }}"
+          # Resource naming follows Terraform pattern
+          PROJECT="${{ vars.PROJECT_NAME || 'OpenAIWorkshop' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
+          ITERATION="${{ vars.ITERATION || '002' }}"
           
-          # Resource group name
+          # Resource group name: rg-{project}-{env}-{iteration}
           echo "resource_group=rg-${PROJECT}-${ENV}-${ITERATION}" >> $GITHUB_OUTPUT
           
-          # Container app names (must match Terraform outputs)
-          echo "mcp_app=ca-${PROJECT}-mcp-${ENV}-${ITERATION}" >> $GITHUB_OUTPUT
-          echo "backend_app=ca-${PROJECT}-be-${ENV}-${ITERATION}" >> $GITHUB_OUTPUT
+          # Container app names: ca-{service}-{iteration}
+          echo "mcp_app=ca-mcp-${ITERATION}" >> $GITHUB_OUTPUT
+          echo "backend_app=ca-be-${ITERATION}" >> $GITHUB_OUTPUT
           
           # ACR server
-          echo "acr_server=${{ vars.REGISTRY_LOGIN_SERVER }}" >> $GITHUB_OUTPUT
+          echo "acr_server=${{ vars.ACR_NAME }}.azurecr.io" >> $GITHUB_OUTPUT
 
       - name: Update MCP Container App
         continue-on-error: true
