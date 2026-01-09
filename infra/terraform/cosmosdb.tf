@@ -52,7 +52,7 @@ resource "azurerm_cosmosdb_sql_container" "customers" {
   resource_group_name = azurerm_resource_group.rg.name
   account_name        = azurerm_cosmosdb_account.main.name
   database_name       = azurerm_cosmosdb_sql_database.main.name
-  partition_key_paths = ["/customer_id"]
+  partition_key_paths = ["/id"]
 
   indexing_policy {
     indexing_mode = "consistent"
@@ -88,6 +88,90 @@ resource "azurerm_cosmosdb_sql_container" "promotions" {
   account_name        = azurerm_cosmosdb_account.main.name
   database_name       = azurerm_cosmosdb_sql_database.main.name
   partition_key_paths = ["/id"]
+}
+
+# Invoices container
+resource "azurerm_cosmosdb_sql_container" "invoices" {
+  name                = "Invoices"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/subscription_id"]
+}
+
+# Payments container
+resource "azurerm_cosmosdb_sql_container" "payments" {
+  name                = "Payments"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/invoice_id"]
+}
+
+# SecurityLogs container
+resource "azurerm_cosmosdb_sql_container" "security_logs" {
+  name                = "SecurityLogs"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/customer_id"]
+}
+
+# Orders container
+resource "azurerm_cosmosdb_sql_container" "orders" {
+  name                = "Orders"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/customer_id"]
+}
+
+# SupportTickets container
+resource "azurerm_cosmosdb_sql_container" "support_tickets" {
+  name                = "SupportTickets"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/customer_id"]
+}
+
+# DataUsage container
+resource "azurerm_cosmosdb_sql_container" "data_usage" {
+  name                = "DataUsage"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/subscription_id"]
+}
+
+# ServiceIncidents container
+resource "azurerm_cosmosdb_sql_container" "service_incidents" {
+  name                = "ServiceIncidents"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/subscription_id"]
+}
+
+# KnowledgeDocuments container with vector indexing
+resource "azurerm_cosmosdb_sql_container" "knowledge_documents" {
+  name                = "KnowledgeDocuments"
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/id"]
+
+  indexing_policy {
+    indexing_mode = "consistent"
+
+    included_path {
+      path = "/*"
+    }
+
+    excluded_path {
+      path = "/content_vector/*"
+    }
+  }
 }
 
 # Agent State Store container (hierarchical partition key)

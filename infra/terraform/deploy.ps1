@@ -25,7 +25,10 @@ param(
     [switch]$PlanOnly,
 
     [Parameter(Mandatory=$false)]
-    [switch]$RemoteBackend
+    [switch]$RemoteBackend,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SeedCosmosData
 )
 
 $ErrorActionPreference = 'Stop'
@@ -226,6 +229,67 @@ if ($LASTEXITCODE -ne 0) {
 
 $ErrorActionPreference = 'Stop'
 
+# Optional: Seed Cosmos DB with sample data
+if ($SeedCosmosData) {
+    Write-Host "`n[7/7] Seeding Cosmos DB with sample data..." -ForegroundColor Green
+    
+    # Get Cosmos DB endpoint from Terraform output
+    Push-Location $PSScriptRoot
+    try {
+        $CosmosEndpoint = terraform output -raw cosmosdb_endpoint
+    }
+    finally {
+        Pop-Location
+    }
+    
+    # Update .env file in mcp directory with Cosmos DB settings
+    $mcpEnvPath = Join-Path $PSScriptRoot ".." ".." "mcp" ".env"
+    
+    # Create or update .env with required settings
+    $envContent = ""
+    if (Test-Path $mcpEnvPath) {
+        $envContent = Get-Content $mcpEnvPath -Raw
+    }
+    
+    # Update COSMOSDB_ENDPOINT
+    if ($envContent -match 'COSMOSDB_ENDPOINT=') {
+        $envContent = $envContent -replace 'COSMOSDB_ENDPOINT="[^"]*"', "COSMOSDB_ENDPOINT=`"$CosmosEndpoint`""
+    } else {
+        $envContent += "`nCOSMOSDB_ENDPOINT=`"$CosmosEndpoint`""
+    }
+    
+    # Update COSMOS_DATABASE_NAME
+    if ($envContent -match 'COSMOS_DATABASE_NAME=') {
+        $envContent = $envContent -replace 'COSMOS_DATABASE_NAME="[^"]*"', "COSMOS_DATABASE_NAME=`"contoso`""
+    } else {
+        $envContent += "`nCOSMOS_DATABASE_NAME=`"contoso`""
+    }
+    
+    $envContent | Set-Content $mcpEnvPath -NoNewline
+    Write-Host "  Updated MCP .env file with Cosmos DB settings" -ForegroundColor Gray
+    
+    # Run data population script
+    $dataScriptPath = Join-Path $PSScriptRoot ".." ".." "mcp" "data" "create_cosmos_db.py"
+    if (Test-Path $dataScriptPath) {
+        Write-Host "  Running data population script..." -ForegroundColor Gray
+        Push-Location (Split-Path $dataScriptPath -Parent)
+        try {
+            python create_cosmos_db.py
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Cosmos DB data seeded successfully" -ForegroundColor Green
+            } else {
+                Write-Host "  Data seeding failed (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+                Write-Host "  You can run it manually: cd mcp/data && python create_cosmos_db.py" -ForegroundColor Yellow
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    } else {
+        Write-Host "  Data script not found at: $dataScriptPath" -ForegroundColor Yellow
+    }
+}
+
 Write-Host "`n======================================" -ForegroundColor Cyan
 Write-Host "Deployment Complete!" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Cyan
@@ -235,3 +299,9 @@ Write-Host "`nMCP Service URL:" -ForegroundColor Yellow
 Write-Host "  $McpUrl" -ForegroundColor Cyan
 Write-Host "`nResource Group:" -ForegroundColor Yellow
 Write-Host "  $ResourceGroupName" -ForegroundColor Cyan
+
+if (-not $SeedCosmosData) {
+    Write-Host "`nTo seed Cosmos DB with sample data, run:" -ForegroundColor Yellow
+    Write-Host "  .\deploy.ps1 -SeedCosmosData" -ForegroundColor Gray
+    Write-Host "  OR manually: cd mcp/data && python create_cosmos_db.py" -ForegroundColor Gray
+}
