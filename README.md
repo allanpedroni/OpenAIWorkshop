@@ -84,7 +84,12 @@ Welcome to the official repository for the Microsoft AI Agentic Workshop! This r
 
 ## Deploy to Azure
 
-- [Complete Azure Deployment Guide](./infra/README.md) - All deployment methods
+| Deployment Method | Description | Guide |
+|-------------------|-------------|-------|
+| **📖 Complete Guide** | Enterprise-ready deployment with security features | [Infrastructure README](./infra/README.md) |
+| **🔒 Enterprise Deployment** | VNet, Private Endpoints, Managed Identity, Zero Trust | [Enterprise Guide](./infra/README.md#security-profiles) |
+| **🔧 Manual Deployment** | Local PowerShell/Terraform deployment | [Manual Steps](./infra/README.md#manual-deployment-powershell) |
+| **🚀 CI/CD Automation** | GitHub Actions with OIDC authentication | [GitHub Actions Setup](./infra/GITHUB_ACTIONS_SETUP.md) |
   
 ---  
   
