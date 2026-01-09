@@ -127,13 +127,13 @@ print_success "RBAC role assigned"
 
 # Step 5: Get Cosmos DB Endpoint
 print_step "Step 5: Retrieving Cosmos DB Connection Details"
-COSMOS_ENDPOINT=$(az cosmosdb show \
+COSMOSDB_ENDPOINT=$(az cosmosdb show \
     --name "$ACCOUNT_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --query documentEndpoint \
     --output tsv)
 
-print_info "Cosmos Endpoint: $COSMOS_ENDPOINT"
+print_info "Cosmos Endpoint: $COSMOSDB_ENDPOINT"
 
 # Step 6: Update .env file
 print_step "Step 6: Updating .env File"
@@ -143,12 +143,12 @@ if [ -f "$ENV_PATH" ]; then
     # Create backup
     cp "$ENV_PATH" "$ENV_PATH.bak"
     
-    # Update or add COSMOS_ENDPOINT
-    if grep -q "^COSMOS_ENDPOINT=" "$ENV_PATH"; then
-        sed -i.tmp "s|^COSMOS_ENDPOINT=.*|COSMOS_ENDPOINT=\"$COSMOS_ENDPOINT\"|" "$ENV_PATH"
+    # Update or add COSMOSDB_ENDPOINT
+    if grep -q "^COSMOSDB_ENDPOINT=" "$ENV_PATH"; then
+        sed -i.tmp "s|^COSMOSDB_ENDPOINT=.*|COSMOSDB_ENDPOINT=\"$COSMOSDB_ENDPOINT\"|" "$ENV_PATH"
         rm -f "$ENV_PATH.tmp"
     else
-        echo "COSMOS_ENDPOINT=\"$COSMOS_ENDPOINT\"" >> "$ENV_PATH"
+        echo "COSMOSDB_ENDPOINT=\"$COSMOSDB_ENDPOINT\"" >> "$ENV_PATH"
     fi
     
     # Update or add COSMOS_DATABASE_NAME
@@ -186,7 +186,7 @@ print_step "SETUP COMPLETE!"
 print_success "Cosmos DB is ready to use"
 print_info ""
 print_info "Connection Details:"
-print_info "  Endpoint: $COSMOS_ENDPOINT"
+print_info "  Endpoint: $COSMOSDB_ENDPOINT"
 print_info "  Database: $DATABASE_NAME"
 print_info "  Authentication: Azure CLI (Current User)"
 print_info ""

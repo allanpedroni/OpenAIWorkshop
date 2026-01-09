@@ -239,7 +239,7 @@ az cosmosdb show \
 
 Add to your `.env`:
 ```ini
-COSMOS_ENDPOINT="https://mcp-contoso-cosmos.documents.azure.com:443/"
+COSMOSDB_ENDPOINT="https://mcp-contoso-cosmos.documents.azure.com:443/"
 COSMOS_DATABASE_NAME="contoso"
 ```
 
@@ -328,7 +328,7 @@ OPENAI_MODEL_NAME="gpt-4"
 DB_PATH="data/contoso.db"
 
 # For Cosmos DB (add these after running setup script):
-COSMOS_ENDPOINT="https://mcp-contoso-cosmos.documents.azure.com:443/"
+COSMOSDB_ENDPOINT="https://mcp-contoso-cosmos.documents.azure.com:443/"
 COSMOS_DATABASE_NAME="contoso"
 
 # ============================================================================
@@ -359,7 +359,7 @@ DISABLE_AUTH="true"
 | `AZURE_OPENAI_API_KEY` | Yes | - | Azure OpenAI API key |
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Yes | - | Embedding model deployment name |
 | `DB_PATH` | SQLite only | `data/contoso.db` | Path to SQLite database |
-| `COSMOS_ENDPOINT` | Cosmos only | - | Cosmos DB account endpoint |
+| `COSMOSDB_ENDPOINT` | Cosmos only | - | Cosmos DB account endpoint |
 | `COSMOS_DATABASE_NAME` | Cosmos only | `contoso` | Cosmos DB database name |
 | `DISABLE_AUTH` | No | `false` | Set to `true` for local dev |
 

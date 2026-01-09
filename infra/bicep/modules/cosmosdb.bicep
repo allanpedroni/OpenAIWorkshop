@@ -185,4 +185,5 @@ output endpoint string = cosmosDb.properties.documentEndpoint
 output primaryKey string = cosmosDb.listKeys().primaryMasterKey
 output databaseName string = databaseName
 output accountName string = cosmosDb.name
+output accountId string = cosmosDb.id
 output agentStateContainer string = agentStateContainerName

@@ -12,3 +12,9 @@ param tags = {
   CostCenter: 'Engineering'
   Owner: 'DevTeam'
 }
+
+// Security Settings
+param useCosmosManagedIdentity = true
+param enableNetworking = true
+param enablePrivateEndpoints = true
+param mcpInternalOnly = true

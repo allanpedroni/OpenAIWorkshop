@@ -5,10 +5,12 @@ resource "azurerm_user_assigned_identity" "backend" {
   location            = azurerm_resource_group.rg.location
 }
 
-# Key Vault Role Assignment - Backend App (Key Vault Secrets User)
-resource "azurerm_role_assignment" "kv_secrets_cabe" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets User"
+# Cognitive Services OpenAI User Role Assignment - Backend App
+# Required for Entra ID / managed identity authentication to Azure OpenAI
+# Allows inference API calls (chat completions, embeddings) without API keys
+resource "azurerm_role_assignment" "openai_user_backend" {
+  scope                = azurerm_ai_services.ai_hub.id
+  role_definition_name = "Cognitive Services OpenAI User"
   principal_id         = azurerm_user_assigned_identity.backend.principal_id
 }
 
@@ -24,7 +26,7 @@ resource "azurerm_container_app" "backend" {
   }
 
   ingress {
-    target_port      = "7000"
+    target_port      = var.backend_target_port
     external_enabled = true
     transport        = "http"
     traffic_weight {
@@ -40,10 +42,19 @@ resource "azurerm_container_app" "backend" {
     }
   }
 
-  secret {
-    name                = "aoai-key"
-    identity            = azurerm_user_assigned_identity.backend.id
-    key_vault_secret_id = azurerm_key_vault_secret.aoai_api_key.id
+  # Registry configuration for ACR with managed identity
+  registry {
+    server   = local.acr_login_server
+    identity = azurerm_user_assigned_identity.backend.id
+  }
+
+  # Cosmos DB key secret (only when not using managed identity)
+  dynamic "secret" {
+    for_each = var.use_cosmos_managed_identity ? [] : [1]
+    content {
+      name  = "cosmosdb-key"
+      value = azurerm_cosmosdb_account.main.primary_key
+    }
   }
 
   template {
@@ -52,12 +63,15 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = var.docker_image_backend
+      # Use placeholder image for initial deployment if custom image not specified
+      # After first deployment, update-containers.yml will set the real image
+      # Using Microsoft's quickstart image as a known-good placeholder
+      image  = var.docker_image_backend != "" ? var.docker_image_backend : "mcr.microsoft.com/k8se/quickstart:latest"
       cpu    = 1
       memory = "2Gi"
 
       readiness_probe {
-        port      = 7000
+        port      = var.backend_target_port
         transport = "HTTP"
         path      = "/docs"
 
@@ -72,43 +86,78 @@ resource "azurerm_container_app" "backend" {
       }
 
       env {
-        name        = "AZURE_OPENAI_API_KEY"
-        secret_name = "aoai-key"
-      }
-
-      env {
         name  = "AZURE_OPENAI_API_VERSION"
-        value = "2025-01-01-preview" # azurerm_cognitive_deployment.gpt.model[0].version
+        value = var.openai_api_version
       }
 
       env {
         name  = "AZURE_OPENAI_EMBEDDING_DEPLOYMENT"
-        value = "text-embedding-ada-002"
+        value = var.openai_embedding_deployment_name
+      }
+
+      # ========== Cosmos DB Configuration ==========
+      env {
+        name  = "COSMOSDB_ENDPOINT"
+        value = azurerm_cosmosdb_account.main.endpoint
       }
 
       env {
-        name  = "DB_PATH"
-        value = "data/contoso.db"
+        name  = "COSMOS_DB_NAME"
+        value = local.cosmos_database_name
       }
 
+      env {
+        name  = "COSMOS_CONTAINER_NAME"
+        value = local.agent_state_container_name
+      }
+
+      # Cosmos DB key (only when not using managed identity)
+      dynamic "env" {
+        for_each = var.use_cosmos_managed_identity ? [] : [1]
+        content {
+          name        = "COSMOSDB_KEY"
+          secret_name = "cosmosdb-key"
+        }
+      }
+
+      # Managed Identity Client ID - always set for Azure OpenAI managed identity auth
+      # Also used for Cosmos DB access when use_cosmos_managed_identity is true
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.backend.client_id
+      }
+
+      env {
+        name  = "MANAGED_IDENTITY_CLIENT_ID"
+        value = azurerm_user_assigned_identity.backend.client_id
+      }
+
+      # ========== AAD Authentication ==========
       env {
         name  = "AAD_TENANT_ID"
-        value = ""
+        value = var.aad_tenant_id
       }
 
       env {
         name  = "MCP_API_AUDIENCE"
-        value = ""
-      }
-
-      env {
-        name  = "MCP_SERVER_URI"
-        value = "https://${azurerm_container_app.mcp.ingress[0].fqdn}/mcp"
+        value = var.aad_api_audience
       }
 
       env {
         name  = "DISABLE_AUTH"
-        value = "true"
+        value = tostring(var.disable_auth)
+      }
+
+      env {
+        name  = "ALLOWED_EMAIL_DOMAIN"
+        value = var.allowed_email_domain
+      }
+
+      # ========== MCP and Agent Configuration ==========
+      env {
+        name  = "MCP_SERVER_URI"
+        # When MCP is internal-only, use internal FQDN; otherwise use public FQDN
+        value = var.mcp_internal_only ? "http://${azurerm_container_app.mcp.name}.internal.${azurerm_container_app_environment.cae.default_domain}/mcp" : "https://${azurerm_container_app.mcp.ingress[0].fqdn}/mcp"
       }
 
       env {
@@ -123,7 +172,7 @@ resource "azurerm_container_app" "backend" {
 
       env {
         name  = "OPENAI_MODEL_NAME"
-        value = "gpt-4.1-2025-04-14" # var.openai_deployment_name
+        value = "${var.openai_model_name}-${var.openai_model_version}"
       }
 
       env {
@@ -151,10 +200,17 @@ resource "azurerm_container_app" "backend" {
     }
   }
   lifecycle {
-    # ignore_changes = []
+    # Ignore image changes - managed by update-containers.yml workflow
+    # This prevents Terraform from reverting to placeholder after update-containers sets real image
+    ignore_changes = [
+      template[0].container[0].image
+    ]
   }
 
   depends_on = [
-    azurerm_role_assignment.kv_secrets_cabe
+    azurerm_role_assignment.openai_user_backend,
+    azurerm_role_assignment.acr_pull_backend,
+    azurerm_cosmosdb_sql_role_assignment.backend_data_owner,
+    azurerm_cosmosdb_sql_role_assignment.backend_data_contributor
   ]
 }

@@ -61,8 +61,8 @@ def get_embedding(text: str):
 BASE_DATE = datetime.now()
 
 # Cosmos DB Configuration
-COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
-print(COSMOS_ENDPOINT)
+COSMOSDB_ENDPOINT = os.getenv("COSMOSDB_ENDPOINT")
+print(COSMOSDB_ENDPOINT)
 COSMOS_DATABASE_NAME = os.getenv("COSMOS_DATABASE_NAME", "contoso")
 
 # Container names
@@ -87,13 +87,13 @@ CONTAINERS = {
 
 def get_cosmos_client():
     """Initialize Cosmos DB client using current Azure CLI credentials."""
-    print(f"Connecting to Cosmos DB at: {COSMOS_ENDPOINT}")
+    print(f"Connecting to Cosmos DB at: {COSMOSDB_ENDPOINT}")
     
     # Use Azure CLI credential (current user login) - required when disableLocalAuth=true
     print("Using Azure CLI credential (current user login)")
     credential = AzureCliCredential()
     
-    client = CosmosClient(COSMOS_ENDPOINT, credential=credential)
+    client = CosmosClient(COSMOSDB_ENDPOINT, credential=credential)
     return client
 
 def create_database(client: CosmosClient, database_name: str):
@@ -1152,7 +1152,7 @@ def main():
     print("SETUP COMPLETE!")
     print("="*70)
     print(f"\nCosmos DB Database: {COSMOS_DATABASE_NAME}")
-    print(f"Endpoint: {COSMOS_ENDPOINT}")
+    print(f"Endpoint: {COSMOSDB_ENDPOINT}")
     print("\nYou can now use the Cosmos DB version of the MCP service.")
 
 if __name__ == "__main__":

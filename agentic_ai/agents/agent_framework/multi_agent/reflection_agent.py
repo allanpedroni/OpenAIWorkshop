@@ -1,4 +1,12 @@
-import json
+"""
+Reflection Agent - Primary Agent + Reviewer pattern with optional streaming.
+
+This agent implements a quality assurance workflow:
+1. Primary Agent generates a response using MCP tools
+2. Reviewer evaluates the response for accuracy and completeness
+3. If not approved, Primary Agent refines based on feedback (up to max_refinements)
+"""
+
 import logging
 from typing import Any, Dict, List
 
@@ -9,548 +17,268 @@ from agents.base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
 
-class Agent(BaseAgent):
-    """Agent Framework implementation with Primary Agent + Reviewer reflection workflow and MCP streaming."""
+# Agent instructions
+PRIMARY_AGENT_INSTRUCTIONS = """You are a helpful customer support assistant for Contoso company. 
+You can help with billing, promotions, security, account information, and other customer inquiries.
+Use the available MCP tools to look up customer information, billing details, promotions, and security settings.
+When a customer provides an ID or asks about their account, use the tools to retrieve accurate, up-to-date information.
+If the user input is just an ID or feels incomplete, infer intent from the conversation context.
+Always be helpful, professional, and provide detailed information when available."""
 
-    def __init__(self, state_store: Dict[str, Any], session_id: str, access_token: str | None = None) -> None:
+REVIEWER_INSTRUCTIONS = """You are a quality assurance reviewer for customer support responses.
+Review responses for: 1) Accuracy, 2) Completeness, 3) Professional tone, 4) Proper tool usage.
+If the response meets quality standards, respond with exactly 'APPROVE'.
+If improvements are needed, provide specific, constructive feedback."""
+
+# Agent display names for UI
+AGENT_NAMES = {
+    "primary_agent": "Primary Agent",
+    "reviewer_agent": "Quality Reviewer",
+}
+
+
+class Agent(BaseAgent):
+    """Reflection Agent with Primary Agent + Reviewer workflow."""
+
+    def __init__(
+        self, 
+        state_store: Dict[str, Any], 
+        session_id: str, 
+        access_token: str | None = None,
+        max_refinements: int = 2,
+    ) -> None:
         super().__init__(state_store, session_id)
         self._primary_agent: ChatAgent | None = None
         self._reviewer: ChatAgent | None = None
         self._thread: AgentThread | None = None
         self._initialized = False
         self._access_token = access_token
-        self._ws_manager = None  # WebSocket manager for streaming
-        # Track conversation turn for tool call grouping - load from state store
-        self._turn_key = f"{session_id}_current_turn"
-        self._current_turn = state_store.get(self._turn_key, 0)
-        
-        # Log that reflection agent is being used
-        print(f"REFLECTION AGENT INITIALIZED - Session: {session_id}")
-        logger.info(f"REFLECTION AGENT INITIALIZED - Session: {session_id}")
+        self._ws_manager = None
+        self._max_refinements = max_refinements
+        logger.info(f"[Reflection] Initialized session: {session_id}")
 
     def set_websocket_manager(self, manager: Any) -> None:
         """Allow backend to inject WebSocket manager for streaming events."""
         self._ws_manager = manager
-        logger.info(f"[STREAMING] WebSocket manager set for reflection_agent, session_id={self.session_id}")
 
-    def _extract_refined_content(self, response: str) -> str:
-        """
-        Extract refined content from agent response, avoiding internal communication.
-        Based on teammate feedback to ensure clean content extraction.
-        """
-        # Look for structured content markers
-        if "##REFINED_CONTENT:" in response and "##END" in response:
-            try:
-                # Extract content between markers
-                start_marker = "##REFINED_CONTENT:"
-                end_marker = "##END"
-                start_idx = response.find(start_marker) + len(start_marker)
-                end_idx = response.find(end_marker)
-                if start_idx > len(start_marker) - 1 and end_idx > start_idx:
-                    extracted = response[start_idx:end_idx].strip()
-                    print(f"[PARSING] Successfully extracted refined content: {len(extracted)} chars")
-                    return extracted
-            except Exception as e:
-                print(f"[PARSING] Error extracting structured content: {e}")
-        
-        # Fallback: return full response if no structured format found
-        print(f"[PARSING] No structured format found, using full response")
-        return response
+    async def _broadcast(self, kind: str, content: str, **extra: Any) -> None:
+        """Send a message to the WebSocket if available."""
+        if self._ws_manager:
+            message = {"type": "orchestrator", "kind": kind, "content": content, **extra}
+            await self._ws_manager.broadcast(self.session_id, message)
 
-    async def _setup_reflection_agents(self) -> None:
+    async def _broadcast_raw(self, message: Dict[str, Any]) -> None:
+        """Send a raw message to the WebSocket if available."""
+        if self._ws_manager:
+            await self._ws_manager.broadcast(self.session_id, message)
+
+    async def _setup_agents(self) -> None:
+        """Initialize Primary Agent and Reviewer with MCP tools."""
         if self._initialized:
             return
 
-        if not all([self.azure_openai_key, self.azure_deployment, self.azure_openai_endpoint, self.api_version]):
-            raise RuntimeError(
-                "Azure OpenAI configuration is incomplete. Ensure AZURE_OPENAI_API_KEY, "
-                "AZURE_OPENAI_CHAT_DEPLOYMENT, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_API_VERSION are set."
-            )
+        # Validate configuration
+        if not all([self.azure_deployment, self.azure_openai_endpoint, self.api_version]):
+            raise RuntimeError("Azure OpenAI configuration incomplete.")
+        
+        if not self.azure_openai_key and not self.azure_credential:
+            raise RuntimeError("Azure OpenAI authentication not configured.")
 
-        headers = self._build_headers()
-        mcp_tools = await self._maybe_create_tools(headers)
+        # Create chat client
+        client_kwargs = {
+            "deployment_name": self.azure_deployment,
+            "endpoint": self.azure_openai_endpoint,
+            "api_version": self.api_version,
+        }
+        if self.azure_openai_key:
+            client_kwargs["api_key"] = self.azure_openai_key
+        else:
+            client_kwargs["credential"] = self.azure_credential
+        
+        chat_client = AzureOpenAIChatClient(**client_kwargs)
 
-        chat_client = AzureOpenAIChatClient(
-            api_key=self.azure_openai_key,
-            deployment_name=self.azure_deployment,
-            endpoint=self.azure_openai_endpoint,
-            api_version=self.api_version,
-        )
+        # Create MCP tools
+        tools = await self._create_mcp_tools()
 
-        tools = mcp_tools[0] if mcp_tools else None
-
-        # Primary Agent - Customer Support Agent with MCP tools
+        # Create agents
         self._primary_agent = ChatAgent(
             name="PrimaryAgent",
             chat_client=chat_client,
-            instructions="You are a helpful customer support assistant for Contoso company. You can help with billing, promotions, security, account information, and other customer inquiries. "
-                "Use the available MCP tools to look up customer information, billing details, promotions, and security settings. "
-                "When a customer provides an ID or asks about their account, use the tools to retrieve accurate, up-to-date information. "
-                "If the user input is just an ID or feels incomplete, review previous communication in the same session and infer the user's intent based on context. "
-                "For example, if they ask about billing and then provide an ID, assume they want billing information for that ID. "
-                "Always be helpful, professional, and provide detailed information when available. "
-                "\n\nIMPORTANT: When responding to reviewer feedback for refinement, format your response exactly as follows:\n"
-                "##REFINED_CONTENT:\n"
-                "[Your improved response here]\n"
-                "##END\n"
-                "This ensures clean content extraction without mixing internal communication with the final response.",
+            instructions=PRIMARY_AGENT_INSTRUCTIONS,
             tools=tools,
             model=self.openai_model_name,
         )
 
-        # Reviewer Agent - Quality assurance for customer support responses
         self._reviewer = ChatAgent(
             name="Reviewer",
             chat_client=chat_client,
-            instructions="You are a quality assurance reviewer for customer support responses. "
-                "Review the customer support agent's response for accuracy, completeness, helpfulness, and professionalism. "
-                "Check if all customer questions were addressed and if the information provided is clear and useful. "
-                "Provide constructive feedback if improvements are needed, or respond with 'APPROVE' if the response meets quality standards. "
-                "Focus on: 1) Accuracy of information, 2) Completeness of answer, 3) Professional tone, 4) Proper use of available tools.",
+            instructions=REVIEWER_INSTRUCTIONS,
             tools=tools,
             model=self.openai_model_name,
         )
 
-        try:
-            await self._primary_agent.__aenter__()
-            await self._reviewer.__aenter__()
-        except Exception:
-            self._primary_agent = None
-            self._reviewer = None
-            raise
+        # Initialize agents
+        await self._primary_agent.__aenter__()
+        await self._reviewer.__aenter__()
 
+        # Load or create thread
         if self.state:
             self._thread = await self._primary_agent.deserialize_thread(self.state)
         else:
             self._thread = self._primary_agent.get_new_thread()
 
         self._initialized = True
+        logger.info("[Reflection] Agents initialized")
 
-    def _build_headers(self) -> Dict[str, str]:
+    async def _create_mcp_tools(self) -> MCPStreamableHTTPTool | None:
+        """Create MCP tools if configured."""
+        if not self.mcp_server_uri:
+            logger.warning("MCP_SERVER_URI not configured")
+            return None
+        
         headers = {"Content-Type": "application/json"}
         if self._access_token:
             headers["Authorization"] = f"Bearer {self._access_token}"
-        return headers
-
-    async def _maybe_create_tools(self, headers: Dict[str, str]) -> List[MCPStreamableHTTPTool] | None:
-        if not self.mcp_server_uri:
-            logger.warning("MCP_SERVER_URI not configured; agents run without MCP tools.")
-            return None
-        return [MCPStreamableHTTPTool(
+        
+        return MCPStreamableHTTPTool(
             name="mcp-streamable",
             url=self.mcp_server_uri,
             headers=headers,
             timeout=30,
             request_timeout=30,
-        )]
+        )
+
+    async def _run_agent(
+        self, 
+        agent: ChatAgent, 
+        prompt: str, 
+        agent_id: str,
+    ) -> str:
+        """Run an agent with optional streaming."""
+        if self._ws_manager:
+            return await self._run_agent_streaming(agent, prompt, agent_id)
+        else:
+            result = await agent.run(prompt, thread=self._thread)
+            return result.text
+
+    async def _run_agent_streaming(
+        self, 
+        agent: ChatAgent, 
+        prompt: str, 
+        agent_id: str,
+    ) -> str:
+        """Run an agent with streaming to WebSocket."""
+        # Notify UI that agent started with label
+        await self._broadcast_raw({
+            "type": "agent_start",
+            "agent_id": agent_id,
+            "agent_name": AGENT_NAMES.get(agent_id, agent_id),
+            "show_message_in_internal_process": True,
+        })
+        
+        chunks: List[str] = []
+        
+        async for chunk in agent.run_stream(prompt, thread=self._thread):
+            # Handle tool calls
+            if hasattr(chunk, 'contents') and chunk.contents:
+                for content in chunk.contents:
+                    if content.type == "function_call":
+                        await self._broadcast_raw({
+                            "type": "tool_called",
+                            "agent_id": agent_id,
+                            "tool_name": content.name,
+                        })
+            
+            # Stream text
+            if hasattr(chunk, 'text') and chunk.text:
+                chunks.append(chunk.text)
+                await self._broadcast_raw({
+                    "type": "agent_token",
+                    "agent_id": agent_id,
+                    "content": chunk.text,
+                })
+        
+        response = ''.join(chunks)
+        
+        # Send complete message
+        await self._broadcast_raw({
+            "type": "agent_message",
+            "agent_id": agent_id,
+            "role": "assistant",
+            "content": response,
+        })
+        
+        return response
+
+    def _is_approved(self, review: str) -> bool:
+        """Check if the reviewer approved the response."""
+        return "APPROVE" in review.upper()
 
     async def chat_async(self, prompt: str) -> str:
-        """Run Primary Agent → Reviewer → Primary Agent refinement pipeline for customer support."""
-        print(f"REFLECTION AGENT chat_async called with prompt: {prompt[:50]}...")
-        logger.info(f"REFLECTION AGENT chat_async called with prompt: {prompt[:50]}...")
+        """Run the reflection workflow: Primary → Reviewer → Refine (if needed)."""
+        logger.info(f"[Reflection] Processing: {prompt[:50]}...")
         
-        await self._setup_reflection_agents()
-        if not (self._primary_agent and self._reviewer and self._thread):
-            raise RuntimeError("Agents not initialized correctly.")
+        await self._setup_agents()
+        if not self._primary_agent or not self._reviewer or not self._thread:
+            raise RuntimeError("Agents not initialized")
 
-        self._current_turn += 1
-        self.state_store[self._turn_key] = self._current_turn
+        # Notify start
+        await self._broadcast("plan", "🔄 Reflection Workflow\n\nStarting Primary Agent → Reviewer pipeline...")
 
-        # Use streaming if WebSocket manager is available
-        if self._ws_manager:
-            print(f"REFLECTION AGENT: Using STREAMING path")
-            logger.info(f"REFLECTION AGENT: Using STREAMING path")
-            return await self._chat_async_streaming(prompt)
-        
-        # Non-streaming path (fallback)
-        print(f"REFLECTION AGENT: Using NON-STREAMING path")
-        logger.info(f"REFLECTION AGENT: Using NON-STREAMING path")
-        return await self._chat_async_non_streaming(prompt)
+        # Step 1: Primary Agent generates response
+        await self._broadcast("step", "🤖 **Primary Agent** analyzing request...")
+        response = await self._run_agent(self._primary_agent, prompt, "primary_agent")
+        logger.info(f"[Reflection] Primary response: {len(response)} chars")
 
-    async def _chat_async_streaming(self, prompt: str) -> str:
-        """Handle reflection workflow with streaming support via WebSocket."""
-        
-        print(f"STREAMING: Starting reflection workflow for: {prompt[:50]}...")
-        logger.info(f"STREAMING: Starting reflection workflow for: {prompt[:50]}...")
-        
-        # Notify UI that reflection workflow is starting
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "orchestrator",
-                    "kind": "plan", 
-                    "content": "Reflection Workflow Starting\n\nInitiating Primary Agent → Reviewer → Refinement pipeline for optimal response quality...",
-                },
+        # Step 2: Reviewer evaluates
+        await self._broadcast("step", "🔍 **Reviewer** evaluating response...")
+        review_prompt = (
+            f"Review this customer support response:\n\n"
+            f"**Question:** {prompt}\n\n"
+            f"**Response:** {response}"
+        )
+        review = await self._run_agent(self._reviewer, review_prompt, "reviewer_agent")
+        logger.info(f"[Reflection] Review: approved={self._is_approved(review)}")
+
+        # Step 3: Refine if needed (up to max_refinements)
+        for attempt in range(self._max_refinements):
+            if self._is_approved(review):
+                await self._broadcast("step", "✅ **Reviewer** approved the response!")
+                break
+            
+            await self._broadcast(
+                "step", 
+                f"🔄 **Primary Agent** refining response (attempt {attempt + 1}/{self._max_refinements})..."
             )
             
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "agent_start",
-                    "agent_id": "primary_agent",
-                    "show_message_in_internal_process": True,
-                },
+            refine_prompt = (
+                f"Improve your response based on this feedback:\n\n"
+                f"**Original Question:** {prompt}\n\n"
+                f"**Your Response:** {response}\n\n"
+                f"**Reviewer Feedback:** {review}\n\n"
+                f"Provide only the improved response, no meta-commentary."
             )
-
-        # Step 1: Primary Agent (Customer Support) handles the customer inquiry
-        print(f"STREAMING STEP 1: Primary Agent processing customer inquiry")
-        logger.info(f"STREAMING STEP 1: Primary Agent processing customer inquiry")
-        
-        # Notify UI about Step 1
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "orchestrator",
-                    "kind": "progress",
-                    "content": "Primary Agent Analysis\n\nAnalyzing your request and gathering information using available tools...",
-                },
-            )
-
-        # Stream Step 1 response
-        step1_response = []
-        try:
-            async for chunk in self._primary_agent.run_stream(prompt, thread=self._thread):
-                # Process contents for tool calls
-                if hasattr(chunk, 'contents') and chunk.contents:
-                    for content in chunk.contents:
-                        if content.type == "function_call":
-                            if self._ws_manager:
-                                await self._ws_manager.broadcast(
-                                    self.session_id,
-                                    {
-                                        "type": "tool_called",
-                                        "agent_id": "primary_agent",
-                                        "tool_name": content.name,
-                                    },
-                                )
-                
-                # Extract and stream text
-                if hasattr(chunk, 'text') and chunk.text:
-                    step1_response.append(chunk.text)
-                    if self._ws_manager:
-                        await self._ws_manager.broadcast(
-                            self.session_id,
-                            {
-                                "type": "agent_token",
-                                "agent_id": "primary_agent",
-                                "content": chunk.text,
-                            },
-                        )
-        except Exception as exc:
-            logger.error("[REFLECTION] Error during Step 1 streaming: %s", exc, exc_info=True)
-            raise
-
-        initial_response = ''.join(step1_response)
-
-        # Step 2: Reviewer checks the customer support response
-        print(f"STREAMING STEP 2: Reviewer evaluating response quality")
-        logger.info(f"STREAMING STEP 2: Reviewer evaluating response quality")
-        
-        # Send complete primary agent response
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "agent_message",
-                    "agent_id": "primary_agent", 
-                    "role": "assistant",
-                    "content": initial_response,
-                },
-            )
-        
-        # Notify UI about moving to review phase
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "orchestrator",
-                    "kind": "progress",
-                    "content": "Quality Reviewer Analysis\n\nReviewer is evaluating the Primary Agent's response for accuracy, completeness, and professional tone...",
-                },
-            )
+            response = await self._run_agent(self._primary_agent, refine_prompt, "primary_agent")
             
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "agent_start",
-                    "agent_id": "reviewer_agent",
-                    "show_message_in_internal_process": True,
-                },
-            )
-
-        feedback_request = f"Please review this customer support response for accuracy, completeness, and professionalism:\n\nCustomer Question: {prompt}\n\nAgent Response: {initial_response}"
-        
-        # Stream reviewer feedback
-        feedback_response = []
-        try:
-            async for chunk in self._reviewer.run_stream(feedback_request, thread=self._thread):
-                # Extract and stream text
-                if hasattr(chunk, 'text') and chunk.text:
-                    feedback_response.append(chunk.text)
-                    if self._ws_manager:
-                        await self._ws_manager.broadcast(
-                            self.session_id,
-                            {
-                                "type": "agent_token",
-                                "agent_id": "reviewer_agent",
-                                "content": chunk.text,
-                            },
-                        )
-        except Exception as exc:
-            logger.error("[REFLECTION] Error during reviewer streaming: %s", exc, exc_info=True)
-            raise
-
-        feedback_result_text = ''.join(feedback_response)
-        
-        # Send complete reviewer response
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "agent_message",
-                    "agent_id": "reviewer_agent",
-                    "role": "assistant", 
-                    "content": feedback_result_text,
-                },
-            )
-
-        # Step 3: Determine if refinement is needed
-        if "APPROVE" not in feedback_result_text.upper():
-            print(f"STREAMING STEP 3: REFINEMENT NEEDED - Primary Agent improving response")
-            logger.info(f"STREAMING STEP 3: REFINEMENT NEEDED - Primary Agent improving response")
-            
-            # Notify UI about Step 3 - refinement
-            if self._ws_manager:
-                await self._ws_manager.broadcast(
-                    self.session_id,
-                    {
-                        "type": "orchestrator",
-                        "kind": "progress",
-                        "content": "Response Refinement\n\nReviewer suggested improvements. Primary Agent is now refining the response based on feedback...",
-                    },
+            # Re-review if not last attempt
+            if attempt < self._max_refinements - 1:
+                review_prompt = (
+                    f"Review this refined response:\n\n"
+                    f"**Question:** {prompt}\n\n"
+                    f"**Response:** {response}"
                 )
-                
-                await self._ws_manager.broadcast(
-                    self.session_id,
-                    {
-                        "type": "agent_start",
-                        "agent_id": "primary_agent_refinement",
-                        "show_message_in_internal_process": True,
-                    },
-                )
+                review = await self._run_agent(self._reviewer, review_prompt, "reviewer_agent")
+                logger.info(f"[Reflection] Re-review: approved={self._is_approved(review)}")
 
-            refinement_request = f"""Please improve your customer support response based on this feedback:
+        # Complete
+        await self._broadcast("result", "✅ Reflection Complete\n\nFinal response delivered with quality assurance!")
+        await self._broadcast_raw({"type": "final_result", "content": response})
 
-Original Question: {prompt}
-
-Your Response: {initial_response}
-
-Reviewer Feedback: {feedback_result_text}
-
-IMPORTANT: Format your refined response exactly as follows:
-##REFINED_CONTENT:
-[Your improved response here]
-##END
-
-Do not include phrases like "Thank you for the feedback" or other meta-commentary. Place only the refined customer support response between the markers."""
-            
-            # Stream refinement response
-            refinement_response = []
-            try:
-                async for chunk in self._primary_agent.run_stream(refinement_request, thread=self._thread):
-                    # Process contents for tool calls
-                    if hasattr(chunk, 'contents') and chunk.contents:
-                        for content in chunk.contents:
-                            if content.type == "function_call":
-                                if self._ws_manager:
-                                    await self._ws_manager.broadcast(
-                                        self.session_id,
-                                        {
-                                            "type": "tool_called",
-                                            "agent_id": "primary_agent_refinement",
-                                            "tool_name": content.name,
-                                        },
-                                    )
-                    
-                    # Extract and stream text
-                    if hasattr(chunk, 'text') and chunk.text:
-                        refinement_response.append(chunk.text)
-                        if self._ws_manager:
-                            await self._ws_manager.broadcast(
-                                self.session_id,
-                                {
-                                    "type": "agent_token",
-                                    "agent_id": "primary_agent_refinement",
-                                    "content": chunk.text,
-                                },
-                            )
-            except Exception as exc:
-                logger.error("[REFLECTION] Error during Step 3 streaming: %s", exc, exc_info=True)
-                raise
-
-            raw_refinement_response = ''.join(refinement_response)
-            
-            # Extract clean content using structured parsing (addresses teammate feedback)
-            assistant_response = self._extract_refined_content(raw_refinement_response)
-            
-            print(f"STREAMING STEP 3: Content extraction - Original: {len(raw_refinement_response)} chars, Extracted: {len(assistant_response)} chars")
-            logger.info(f"STREAMING STEP 3: Content extraction - Original: {len(raw_refinement_response)} chars, Extracted: {len(assistant_response)} chars")
-            
-            # Send complete refinement response
-            if self._ws_manager:
-                await self._ws_manager.broadcast(
-                    self.session_id,
-                    {
-                        "type": "agent_message",
-                        "agent_id": "primary_agent_refinement",
-                        "role": "assistant",
-                        "content": assistant_response,
-                    },
-                )
-        else:
-            print(f"STREAMING STEP 3: APPROVED - Response approved by reviewer")
-            logger.info(f"STREAMING STEP 3: APPROVED - Response approved by reviewer")
-            
-            # Notify UI about approval
-            if self._ws_manager:
-                await self._ws_manager.broadcast(
-                    self.session_id,
-                    {
-                        "type": "orchestrator",
-                        "kind": "result",
-                        "content": "Quality Approved\n\nReviewer has approved the Primary Agent's response! No refinement needed.",
-                    },
-                )
-            
-            assistant_response = initial_response
-
-        # Send final result with reflection summary
-        reflection_summary = "Reflection Process Complete\n\n"
-        reflection_summary += "• Primary Agent: Analyzed request and gathered information\n"
-        reflection_summary += "• Quality Reviewer: Evaluated response for accuracy and completeness\n"
-        if "APPROVE" not in feedback_result_text.upper():
-            reflection_summary += "• Refinement: Response improved based on reviewer feedback\n"
-        else:
-            reflection_summary += "• Approval: Response met quality standards on first attempt\n"
-        reflection_summary += "\nFinal response delivered with enhanced quality assurance!"
-        
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "orchestrator",
-                    "kind": "result",
-                    "content": reflection_summary,
-                },
-            )
-            
-        if self._ws_manager:
-            await self._ws_manager.broadcast(
-                self.session_id,
-                {
-                    "type": "final_result",
-                    "content": assistant_response,
-                },
-            )
-
-        messages = [
+        # Save state
+        self.append_to_chat_history([
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": assistant_response},
-        ]
-        self.append_to_chat_history(messages)
+            {"role": "assistant", "content": response},
+        ])
+        self._setstate(await self._thread.serialize())
 
-        new_state = await self._thread.serialize()
-        self._setstate(new_state)
-
-        return assistant_response
-
-    async def _chat_async_non_streaming(self, prompt: str) -> str:
-        """Handle reflection workflow without streaming (fallback)."""
-        
-        # Step 1: Primary Agent (Customer Support) handles the customer inquiry
-        logger.info(f"[REFLECTION] ===============================================")
-        logger.info(f"[REFLECTION] STEP 1: Primary Agent processing customer inquiry")
-        logger.info(f"[REFLECTION] Session: {self.session_id}, Turn: {self._current_turn}")
-        logger.info(f"[REFLECTION] Customer Question: {prompt}")
-        logger.info(f"[REFLECTION] ===============================================")
-        
-        initial_result = await self._primary_agent.run(prompt, thread=self._thread)
-        
-        logger.info(f"[REFLECTION] ===============================================")
-        logger.info(f"[REFLECTION] STEP 1 COMPLETED: Primary Agent Response Generated")
-        logger.info(f"[REFLECTION] Response Length: {len(initial_result.text)} characters")
-        logger.info(f"[REFLECTION] Response Preview: {initial_result.text[:200]}...")
-        logger.info(f"[REFLECTION] ===============================================")
-
-        # Step 2: Reviewer checks the customer support response
-        logger.info(f"[REFLECTION] ===============================================")
-        logger.info(f"[REFLECTION] STEP 2: Reviewer evaluating response quality")
-        logger.info(f"[REFLECTION] Sending Primary Agent's response to Reviewer...")
-        logger.info(f"[REFLECTION] ===============================================")
-        
-        feedback_request = f"Please review this customer support response for accuracy, completeness, and professionalism:\n\nCustomer Question: {prompt}\n\nAgent Response: {initial_result.text}"
-        feedback = await self._reviewer.run(feedback_request, thread=self._thread)
-        
-        logger.info(f"[REFLECTION] ===============================================")
-        logger.info(f"[REFLECTION] STEP 2 COMPLETED: Reviewer Feedback Generated")
-        logger.info(f"[REFLECTION] Feedback Length: {len(feedback.text)} characters")
-        logger.info(f"[REFLECTION] Feedback Preview: {feedback.text[:200]}...")
-        logger.info(f"[REFLECTION] Contains 'APPROVE': {'APPROVE' in feedback.text.upper()}")
-        logger.info(f"[REFLECTION] ===============================================")
-
-        # Step 3: Primary Agent refines response based on feedback (if needed)
-        if "APPROVE" not in feedback.text.upper():
-            logger.info(f"[REFLECTION] ===============================================")
-            logger.info(f"[REFLECTION] STEP 3: REFINEMENT NEEDED - Primary Agent improving response")
-            logger.info(f"[REFLECTION] Reviewer suggested improvements, sending back to Primary Agent...")
-            logger.info(f"[REFLECTION] ===============================================")
-            
-            refinement_request = f"""Please improve your customer support response based on this feedback:
-
-Original Question: {prompt}
-
-Your Response: {initial_result.text}
-
-Reviewer Feedback: {feedback.text}
-
-IMPORTANT: Format your refined response exactly as follows:
-##REFINED_CONTENT:
-[Your improved response here]
-##END
-
-Do not include phrases like "Thank you for the feedback" or other meta-commentary. Place only the refined customer support response between the markers."""
-            final_result = await self._primary_agent.run(refinement_request, thread=self._thread)
-            raw_response = final_result.text
-            assistant_response = self._extract_refined_content(raw_response)
-            
-            logger.info(f"[REFLECTION] ===============================================")
-            logger.info(f"[REFLECTION] STEP 3 COMPLETED: Primary Agent Refined Response")
-            logger.info(f"[REFLECTION] Refined Response Length: {len(assistant_response)} characters")
-            logger.info(f"[REFLECTION] Refined Response Preview: {assistant_response[:200]}...")
-            logger.info(f"[REFLECTION] ===============================================")
-        else:
-            logger.info(f"[REFLECTION] ===============================================")
-            logger.info(f"[REFLECTION] STEP 3: APPROVAL - No refinement needed")
-            logger.info(f"[REFLECTION] Reviewer approved the response, using original response")
-            logger.info(f"[REFLECTION] ===============================================")
-            assistant_response = initial_result.text
-
-        logger.info(f"[REFLECTION] ===============================================")
-        logger.info(f"[REFLECTION] REFLECTION WORKFLOW COMPLETED SUCCESSFULLY")
-        logger.info(f"[REFLECTION] Final Response Length: {len(assistant_response)} characters")
-        logger.info(f"[REFLECTION] Agents Involved: Primary Agent + Reviewer")
-        logger.info(f"[REFLECTION] Refinement Required: {'Yes' if 'APPROVE' not in feedback.text.upper() else 'No'}")
-        logger.info(f"[REFLECTION] ===============================================")
-
-        messages = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": assistant_response},
-        ]
-        self.append_to_chat_history(messages)
-
-        new_state = await self._thread.serialize()
-        self._setstate(new_state)
-
-        return assistant_response
+        return response

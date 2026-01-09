@@ -4,8 +4,8 @@ metadata:
 
 infra:
   provider: bicep
-  path: infra
-  module: main.azd
+  path: infra/bicep
+  module: main
 
 services:
   mcp:

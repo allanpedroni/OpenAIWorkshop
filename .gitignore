@@ -153,3 +153,21 @@ cython_debug/
 npm-debug.log*
 node_modules
 static/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+# Deployment outputs (generated)
+deployment-outputs.json
+**/deployment-outputs.json

@@ -195,7 +195,8 @@ graph LR
 
 ---
 
-# Component Breakdown## 1. Frontend  
+# Component Breakdown
+## 1. Frontend  
 
 ### React UI (Recommended for Production)
 

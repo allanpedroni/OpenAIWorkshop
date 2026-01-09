@@ -15,7 +15,6 @@ This feature adds UI-based agent selection to the Magentic AI Assistant, allowin
      - `agents.agent_framework.multi_agent.handoff_multi_domain_agent`
      - `agents.agent_framework.multi_agent.magentic_group`
      - `agents.agent_framework.multi_agent.reflection_agent`
-     - `agents.agent_framework.multi_agent.reflection_workflow_agent`
    - Created `load_agent_class()` function for dynamic agent module loading
    - Added `CURRENT_AGENT_MODULE` global variable to track active agent
 
@@ -81,9 +80,6 @@ This feature adds UI-based agent selection to the Magentic AI Assistant, allowin
    - Agent with built-in reflection and self-critique
    - Iterative improvement of responses
 
-5. **Reflection Workflow Agent**
-   - Workflow-based reflection with quality assurance gates
-   - Primary agent + Reviewer agent pattern
 
 ### Benefits
 

@@ -1,4 +1,4 @@
-name: Build and Push Docker Image for MCP Service
+name: Build and Push Docker Image for Backend Application
 
 on:
   # Only run via workflow_call from orchestrate.yml or manual dispatch
@@ -18,14 +18,14 @@ on:
         default: dev
 
 env:
-  IMAGE_NAME: mcp-service
-  PROJECT_SUBPATH: mcp/
+  IMAGE_NAME: backend-app
+  PROJECT_SUBPATH: agentic_ai/
   IMAGE_TAG: ${{ inputs.environment && format('{0}-latest', inputs.environment) || 'latest' }}
 
 
 jobs:
   build:
-    name: Build & Push MCP Image
+    name: Build & Push Backend Image
     runs-on: ubuntu-latest
     # environment: ${{ inputs.environment || 'dev' }}  # Commented out to use repo-level variables
     permissions:
@@ -62,13 +62,15 @@ jobs:
 
       - name: Build and Push Image
         run: |
+          cd ${{ env.PROJECT_SUBPATH }}
           ACR_SERVER="${{ steps.acr.outputs.server }}"
           
           # Build with both SHA tag and environment tag
-          docker build ${{ env.PROJECT_SUBPATH }} \
+          docker build \
             -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
             -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
-            -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:latest"
+            -t "${ACR_SERVER}/${{ env.IMAGE_NAME }}:latest" \
+            -f applications/Dockerfile .
           
           # Push all tags
           docker push "${ACR_SERVER}/${{ env.IMAGE_NAME }}" --all-tags

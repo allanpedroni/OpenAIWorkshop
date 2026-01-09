@@ -24,8 +24,18 @@ param imageTag string = 'latest'
 @description('Full container image name from azd')
 param imageName string = ''
 
-var mcpServiceName = '${baseName}-mcp'
-var containerImage = !empty(imageName) ? imageName : '${containerRegistryName}.azurecr.io/mcp-service:${imageTag}'
+@description('Make MCP service internal-only (not exposed to public internet)')
+param mcpInternalOnly bool = false
+
+@description('Container Apps Environment default domain (required when mcpInternalOnly is true)')
+param containerAppsEnvironmentDomain string = ''
+
+@description('Use placeholder image for initial deployment (before real image is pushed to ACR)')
+param usePlaceholderImage bool = true
+
+var mcpServiceName = '${baseName}-mcp-${environmentName}'
+// Use placeholder image for initial deployment - update-containers.yml will set the real image
+var containerImage = !empty(imageName) ? imageName : (usePlaceholderImage ? 'mcr.microsoft.com/k8se/quickstart:latest' : '${containerRegistryName}.azurecr.io/mcp-service:${imageTag}')
 var azdTags = union(tags, {
   'azd-service-name': 'mcp'
   'azd-service-type': 'containerapp'
@@ -39,7 +49,7 @@ var cosmosSecrets = (!useCosmosManagedIdentity && !empty(cosmosDbKey)) ? [
 
 var cosmosEnvSettings = concat([
   {
-    name: 'COSMOS_ENDPOINT'
+    name: 'COSMOSDB_ENDPOINT'
     value: cosmosDbEndpoint
   }
   {
@@ -88,10 +98,11 @@ resource mcpService 'Microsoft.App/containerApps@2023-05-01' = {
     managedEnvironmentId: containerAppsEnvironmentId
     configuration: {
       ingress: {
-        external: true
+        external: !mcpInternalOnly
         targetPort: 8000
         transport: 'http'
-        allowInsecure: false
+        // Allow HTTP (non-TLS) for internal communication - safe because MCP is internal-only
+        allowInsecure: mcpInternalOnly
       }
       registries: [
         {
@@ -138,6 +149,6 @@ resource mcpService 'Microsoft.App/containerApps@2023-05-01' = {
   tags: azdTags
 }
 
-output serviceUrl string = 'https://${mcpService.properties.configuration.ingress.fqdn}/mcp'
+output serviceUrl string = mcpInternalOnly ? 'http://${mcpService.name}.internal.${containerAppsEnvironmentDomain}/mcp' : 'https://${mcpService.properties.configuration.ingress.fqdn}/mcp'
 output serviceName string = mcpService.name
 output fqdn string = mcpService.properties.configuration.ingress.fqdn

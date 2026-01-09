@@ -33,21 +33,42 @@ class Agent(BaseAgent):
         if self._initialized:
             return
 
-        if not all([self.azure_openai_key, self.azure_deployment, self.azure_openai_endpoint, self.api_version]):
+        # Check for either API key OR credential-based authentication
+        has_api_key = bool(self.azure_openai_key)
+        has_credential = bool(self.azure_credential)
+        
+        if not all([self.azure_deployment, self.azure_openai_endpoint, self.api_version]):
             raise RuntimeError(
-                "Azure OpenAI configuration is incomplete. Ensure AZURE_OPENAI_API_KEY, "
+                "Azure OpenAI configuration is incomplete. Ensure "
                 "AZURE_OPENAI_CHAT_DEPLOYMENT, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_API_VERSION are set."
+            )
+        
+        if not has_api_key and not has_credential:
+            raise RuntimeError(
+                "Azure OpenAI authentication is not configured. Either set AZURE_OPENAI_API_KEY "
+                "or ensure managed identity is available for credential-based authentication."
             )
 
         headers = self._build_headers()
         mcp_tools = await self._maybe_create_tools(headers)
 
-        chat_client = AzureOpenAIChatClient(
-            api_key=self.azure_openai_key,
-            deployment_name=self.azure_deployment,
-            endpoint=self.azure_openai_endpoint,
-            api_version=self.api_version,
-        )
+        # Use API key if available, otherwise use credential-based authentication
+        if has_api_key:
+            chat_client = AzureOpenAIChatClient(
+                api_key=self.azure_openai_key,
+                deployment_name=self.azure_deployment,
+                endpoint=self.azure_openai_endpoint,
+                api_version=self.api_version,
+            )
+            logger.info("[AgentFramework] Using API key authentication for Azure OpenAI")
+        else:
+            chat_client = AzureOpenAIChatClient(
+                credential=self.azure_credential,
+                deployment_name=self.azure_deployment,
+                endpoint=self.azure_openai_endpoint,
+                api_version=self.api_version,
+            )
+            logger.info("[AgentFramework] Using managed identity authentication for Azure OpenAI")
 
         instructions = (
             "You are a helpful assistant. You can use multiple tools to find information and answer questions. "

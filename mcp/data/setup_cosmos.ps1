@@ -147,11 +147,11 @@ try {
     if (Test-Path $envPath) {
         $envContent = Get-Content $envPath -Raw
         
-        # Update or add COSMOS_ENDPOINT
-        if ($envContent -match 'COSMOS_ENDPOINT=') {
-            $envContent = $envContent -replace 'COSMOS_ENDPOINT="[^"]*"', "COSMOS_ENDPOINT=`"$cosmosEndpoint`""
+        # Update or add COSMOSDB_ENDPOINT
+        if ($envContent -match 'COSMOSDB_ENDPOINT=') {
+            $envContent = $envContent -replace 'COSMOSDB_ENDPOINT="[^"]*"', "COSMOSDB_ENDPOINT=`"$cosmosEndpoint`""
         } else {
-            $envContent += "`nCOSMOS_ENDPOINT=`"$cosmosEndpoint`""
+            $envContent += "`nCOSMOSDB_ENDPOINT=`"$cosmosEndpoint`""
         }
         
         # Update or add COSMOS_DATABASE_NAME

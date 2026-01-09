@@ -28,7 +28,7 @@ output "ai_hub_id" {
 # Azure OpenAI
 output "openai_account_name" {
   description = "Name of the Azure OpenAI account"
-  value       = azurerm_cognitive_deployment.gpt.name
+  value       = var.create_openai_deployment ? azurerm_cognitive_deployment.gpt[0].name : var.openai_deployment_name
 }
 
 output "openai_endpoint" {
@@ -38,23 +38,7 @@ output "openai_endpoint" {
 
 output "openai_deployment_name" {
   description = "Name of the OpenAI model deployment"
-  value       = azurerm_cognitive_deployment.gpt.name
-}
-
-# Key Vault
-output "key_vault_name" {
-  description = "Name of the Key Vault"
-  value       = azurerm_key_vault.main.name
-}
-
-output "key_vault_uri" {
-  description = "URI of the Key Vault"
-  value       = azurerm_key_vault.main.vault_uri
-}
-
-output "key_vault_id" {
-  description = "ID of the Key Vault"
-  value       = azurerm_key_vault.main.id
+  value       = var.create_openai_deployment ? azurerm_cognitive_deployment.gpt[0].name : var.openai_deployment_name
 }
 
 output "mcp_aca_url" {
@@ -65,4 +49,75 @@ output "mcp_aca_url" {
 output "be_aca_url" {
   description = "URL of the backend container app"
   value       = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
+}
+
+# ============================================================================
+# Cosmos DB Outputs (aligned with Bicep)
+# ============================================================================
+
+output "cosmosdb_endpoint" {
+  description = "Cosmos DB endpoint URL"
+  value       = azurerm_cosmosdb_account.main.endpoint
+}
+
+output "cosmosdb_account_name" {
+  description = "Cosmos DB account name"
+  value       = azurerm_cosmosdb_account.main.name
+}
+
+output "cosmosdb_database_name" {
+  description = "Cosmos DB database name"
+  value       = local.cosmos_database_name
+}
+
+output "cosmosdb_agent_state_container" {
+  description = "Cosmos DB agent state container name"
+  value       = local.agent_state_container_name
+}
+
+# ============================================================================
+# Container Registry Outputs (aligned with Bicep)
+# ============================================================================
+
+output "container_registry_name" {
+  description = "Name of the Container Registry"
+  value       = local.acr_name_final
+}
+
+output "container_registry_login_server" {
+  description = "Login server for the Container Registry"
+  value       = local.acr_login_server
+}
+
+output "container_registry_id" {
+  description = "ID of the Container Registry"
+  value       = var.create_acr ? azurerm_container_registry.main[0].id : data.azurerm_container_registry.existing[0].id
+}
+
+# ============================================================================
+# Container Apps Environment
+# ============================================================================
+
+output "container_apps_environment_id" {
+  description = "ID of the Container Apps Environment"
+  value       = azurerm_container_app_environment.cae.id
+}
+
+output "container_apps_environment_name" {
+  description = "Name of the Container Apps Environment"
+  value       = azurerm_container_app_environment.cae.name
+}
+
+# ============================================================================
+# Managed Identities
+# ============================================================================
+
+output "backend_identity_client_id" {
+  description = "Client ID of the backend managed identity"
+  value       = azurerm_user_assigned_identity.backend.client_id
+}
+
+output "mcp_identity_client_id" {
+  description = "Client ID of the MCP managed identity"
+  value       = azurerm_user_assigned_identity.mcp.client_id
 }

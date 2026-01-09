@@ -17,7 +17,7 @@ from azure.identity import AzureCliCredential
 load_dotenv()
 
 # Cosmos DB Configuration
-COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
+COSMOSDB_ENDPOINT = os.getenv("COSMOSDB_ENDPOINT")
 COSMOS_DATABASE_NAME = os.getenv("COSMOS_DATABASE_NAME", "contoso")
 
 # Container names
@@ -46,7 +46,7 @@ def get_cosmos_client() -> CosmosClient:
     global _cosmos_client
     if _cosmos_client is None:
         credential = AzureCliCredential()
-        _cosmos_client = CosmosClient(COSMOS_ENDPOINT, credential=credential)
+        _cosmos_client = CosmosClient(COSMOSDB_ENDPOINT, credential=credential)
     return _cosmos_client
 
 

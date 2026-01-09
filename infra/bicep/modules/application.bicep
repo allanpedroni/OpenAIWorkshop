@@ -36,10 +36,6 @@ param userAssignedIdentityClientId string = ''
 @description('Azure OpenAI endpoint URL')
 param azureOpenAIEndpoint string
 
-@description('Azure OpenAI API key')
-@secure()
-param azureOpenAIKey string
-
 @description('Azure OpenAI deployment name')
 param azureOpenAIDeploymentName string
 
@@ -73,8 +69,18 @@ param imageTag string = 'latest'
 @description('Full container image name from azd')
 param imageName string = ''
 
-var appName = '${baseName}-app'
-var containerImage = !empty(imageName) ? imageName : '${containerRegistryName}.azurecr.io/workshop-app:${imageTag}'
+@description('Environment name for naming convention')
+param environmentName string = 'dev'
+
+@description('Use placeholder image for initial deployment (before real image is pushed to ACR)')
+param usePlaceholderImage bool = true
+
+@description('Azure OpenAI API version')
+param azureOpenAIApiVersion string = '2025-03-01-preview'
+
+var appName = '${baseName}-app-${environmentName}'
+// Use placeholder image for initial deployment - update-containers.yml will set the real image
+var containerImage = !empty(imageName) ? imageName : (usePlaceholderImage ? 'mcr.microsoft.com/k8se/quickstart:latest' : '${containerRegistryName}.azurecr.io/backend-app:${imageTag}')
 var azdTags = union(tags, {
   'azd-service-name': 'app'
   'azd-service-type': 'containerapp'
@@ -91,7 +97,7 @@ var cosmosSecretEntries = (!useCosmosManagedIdentity && !empty(cosmosDbKey)) ? [
 
 var cosmosEndpointEnv = !empty(cosmosDbEndpoint) ? [
   {
-    name: 'COSMOS_ENDPOINT'
+    name: 'COSMOSDB_ENDPOINT'
     value: cosmosDbEndpoint
   }
 ] : []
@@ -169,10 +175,6 @@ resource application 'Microsoft.App/containerApps@2023-05-01' = {
           name: 'registry-password'
           value: containerRegistry.listCredentials().passwords[0].value
         }
-        {
-          name: 'azure-openai-key'
-          value: azureOpenAIKey
-        }
       ], cosmosSecretEntries)
     }
     template: {
@@ -184,18 +186,34 @@ resource application 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json('1.0')
             memory: '2Gi'
           }
+          probes: [
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/docs'
+                port: 3000
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 30
+              failureThreshold: 3
+            }
+          ]
           env: concat([
             {
               name: 'AZURE_OPENAI_ENDPOINT'
               value: azureOpenAIEndpoint
             }
             {
-              name: 'AZURE_OPENAI_API_KEY'
-              secretRef: 'azure-openai-key'
-            }
-            {
               name: 'AZURE_OPENAI_CHAT_DEPLOYMENT'
               value: azureOpenAIDeploymentName
+            }
+            {
+              name: 'AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME'
+              value: azureOpenAIDeploymentName
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT'
+              value: azureOpenAIEmbeddingDeploymentName
             }
             {
               name: 'AZURE_OPENAI_EMB_DEPLOYMENT'
@@ -203,7 +221,7 @@ resource application 'Microsoft.App/containerApps@2023-05-01' = {
             }
             {
               name: 'AZURE_OPENAI_API_VERSION'
-              value: '2025-03-01-preview'
+              value: azureOpenAIApiVersion
             }
             {
               name: 'OPENAI_MODEL_NAME'

@@ -38,10 +38,10 @@ Write-Host "`nUsing Subscription: $SubscriptionId" -ForegroundColor Yellow
 Write-Host "`n[1/5] Deploying Azure Infrastructure..." -ForegroundColor Green
 az deployment sub create `
     --location $Location `
-    --template-file ./infra/main.bicep `
+    --template-file $PSScriptRoot/main.bicep `
     --parameters location=$Location environmentName=$Environment baseName=$BaseName `
     --name "openai-workshop-$Environment-$(Get-Date -Format 'yyyyMMdd-HHmmss')" `
-    --query 'properties.outputs' -o json | Out-File -FilePath "./deployment-outputs.json"
+    --query 'properties.outputs' -o json | Out-File -FilePath "$PSScriptRoot/../../deployment-outputs.json"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Infrastructure deployment failed!"
@@ -51,7 +51,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Infrastructure deployed successfully!" -ForegroundColor Green
 
 # Read outputs
-$outputs = Get-Content "./deployment-outputs.json" | ConvertFrom-Json
+$outputs = Get-Content "$PSScriptRoot/../../deployment-outputs.json" | ConvertFrom-Json
 $AcrLoginServer = "$AcrName.azurecr.io"
 
 Write-Host "`nDeployment Outputs:" -ForegroundColor Yellow
@@ -79,7 +79,7 @@ if ($LASTEXITCODE -ne 0) {
 if (-not $SkipBuild) {
     Write-Host "`n[3/5] Building and pushing MCP Service image..." -ForegroundColor Green
     
-    Push-Location mcp
+    Push-Location $PSScriptRoot/../../mcp
     try {
         docker build -t "$AcrLoginServer/mcp-service:latest" -f Dockerfile .
         docker push "$AcrLoginServer/mcp-service:latest"
@@ -102,9 +102,9 @@ if (-not $SkipBuild) {
 if (-not $SkipBuild) {
     Write-Host "`n[4/5] Building and pushing Application image..." -ForegroundColor Green
     
-    Push-Location agentic_ai/applications
+    Push-Location $PSScriptRoot/../../agentic_ai
     try {
-        docker build -t "$AcrLoginServer/workshop-app:latest" -f Dockerfile .
+        docker build -t "$AcrLoginServer/workshop-app:latest" -f applications/Dockerfile .
         docker push "$AcrLoginServer/workshop-app:latest"
         
         if ($LASTEXITCODE -ne 0) {

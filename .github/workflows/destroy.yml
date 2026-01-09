@@ -30,7 +30,7 @@ jobs:
   terraform_destroy:
     name: Terraform Destroy
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'dev' }}
+    # environment: ${{ inputs.environment || 'dev' }}  # Commented out to use repo-level variables
     permissions:
       id-token: write
       contents: read
@@ -58,7 +58,7 @@ jobs:
 
           terraform init -backend-config="resource_group_name=${TFSTATE_RG}" \
                          -backend-config="key=${TFSTATE_KEY}" -backend-config="storage_account_name=${TFSTATE_ACCOUNT}" \
-                         -backend-config="container_name=${TFSTATE_CONTAINER}"
+                         -backend-config="container_name=${TFSTATE_CONTAINER}" -backend-config="use_oidc=true" -backend-config="use_azuread_auth=true"
           
           terraform destroy -auto-approve \
             -var project_name=${{ github.event.repository.name }} \

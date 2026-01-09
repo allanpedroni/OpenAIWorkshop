@@ -23,23 +23,20 @@ param tags object = {
 @description('Enable user-assigned managed identity for Container Apps to access Cosmos DB without keys')
 param useCosmosManagedIdentity bool = true
 
+@description('Enable VNet integration and networking resources')
+param enableNetworking bool = false
+
+@description('Enable private endpoints for Azure OpenAI and Cosmos DB')
+param enablePrivateEndpoints bool = false
+
+@description('Make MCP service internal-only (not exposed to public internet). Only apps in the same Container Apps environment can access it.')
+param mcpInternalOnly bool = false
+
 // Resource Group
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: '${baseName}-${environmentName}-rg'
   location: location
   tags: tags
-}
-
-// Azure OpenAI Service
-module openai 'modules/openai.bicep' = {
-  scope: rg
-  name: 'openai-deployment'
-  params: {
-    location: location
-    baseName: baseName
-    environmentName: environmentName
-    tags: tags
-  }
 }
 
 // Cosmos DB with containers
@@ -78,6 +75,24 @@ module logAnalytics 'modules/log-analytics.bicep' = {
   }
 }
 
+// Networking (VNet, Subnets, Private DNS Zones, Private Endpoints)
+// Always deploy when networking is enabled, module handles conditional resources internally
+module network 'modules/network.bicep' = {
+  scope: rg
+  name: 'network-deployment'
+  params: {
+    location: location
+    baseName: baseName
+    environmentName: environmentName
+    tags: tags
+    containerAppsSubnetPrefix: '10.10.0.0/23'
+    privateEndpointSubnetPrefix: '10.10.2.0/24'
+    enablePrivateEndpoints: enablePrivateEndpoints
+    cosmosDbAccountId: cosmosdb.outputs.accountId
+    openAIAccountId: openai.outputs.resourceId
+  }
+}
+
 // Container Apps Environment
 module containerAppsEnv 'modules/container-apps-environment.bicep' = {
   scope: rg
@@ -88,6 +103,8 @@ module containerAppsEnv 'modules/container-apps-environment.bicep' = {
     environmentName: environmentName
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: tags
+    // Add VNet integration when networking is enabled
+    infrastructureSubnetId: enableNetworking ? network.outputs.containerAppsSubnetId : ''
   }
 }
 
@@ -99,6 +116,22 @@ module containerAppsIdentity 'modules/managed-identity.bicep' = {
     location: location
     name: '${baseName}-${environmentName}-apps-mi'
     tags: tags
+  }
+}
+
+// Azure OpenAI Service
+module openai 'modules/openai.bicep' = {
+  scope: rg
+  name: 'openai-deployment'
+  params: {
+    location: location
+    baseName: baseName
+    environmentName: environmentName
+    tags: tags
+    // Assign Cognitive Services OpenAI User role to managed identity for Entra ID auth
+    openAIUserPrincipalId: containerAppsIdentity.outputs.principalId
+    // Enable private endpoint mode (disables public network access)
+    enablePrivateEndpoint: enablePrivateEndpoints
   }
 }
 
@@ -129,7 +162,10 @@ module mcpService 'modules/mcp-service.bicep' = {
     useCosmosManagedIdentity: useCosmosManagedIdentity
     userAssignedIdentityResourceId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.resourceId : ''
     userAssignedIdentityClientId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.clientId : ''
+    mcpInternalOnly: mcpInternalOnly
+    containerAppsEnvironmentDomain: containerAppsEnv.outputs.defaultDomain
     tags: tags
+    usePlaceholderImage: true  // Use placeholder for initial deployment, update-containers.yml sets real image
   }
 }
 
@@ -140,10 +176,10 @@ module application 'modules/application.bicep' = {
   params: {
     location: location
     baseName: baseName
+    environmentName: environmentName
     containerAppsEnvironmentId: containerAppsEnv.outputs.environmentId
     containerRegistryName: acr.outputs.registryName
     azureOpenAIEndpoint: openai.outputs.endpoint
-    azureOpenAIKey: openai.outputs.key
     azureOpenAIDeploymentName: openai.outputs.chatDeploymentName
     azureOpenAIEmbeddingDeploymentName: openai.outputs.embeddingDeploymentName
     mcpServiceUrl: mcpService.outputs.serviceUrl
@@ -155,6 +191,7 @@ module application 'modules/application.bicep' = {
     userAssignedIdentityResourceId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.resourceId : ''
     userAssignedIdentityClientId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.clientId : ''
     tags: tags
+    usePlaceholderImage: true  // Use placeholder for initial deployment, update-containers.yml sets real image
   }
 }
 

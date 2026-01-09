@@ -1,6 +1,7 @@
 pytest
 pytest-asyncio
 pytest-anyio
+pytest-timeout
 requests
 azure-identity
 azure-keyvault-secrets

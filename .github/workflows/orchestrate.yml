@@ -26,19 +26,7 @@ permissions:
 jobs:
   preflight:
     runs-on: ubuntu-latest
-    environment: >-
-      ${{
-        inputs.target_env
-        || (github.event_name == 'pull_request' && (
-             github.base_ref == 'tjs-infra-as-code' && 'dev'
-          || github.base_ref == 'int-agentic'        && 'integration'
-          || github.base_ref == 'main'               && 'prod'
-        ))
-        || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-        || (github.ref_name == 'int-agentic'        && 'integration')
-        || (github.ref_name == 'main'               && 'prod')
-        || 'dev'
-      }}
+    # environment: removed to use repo-level variables
     steps:
       - name: Azure OIDC Login
         uses: azure/login@v2
@@ -53,61 +41,10 @@ jobs:
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --default-action Allow
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
           
-          echo "MCAPS sub disables key vault networking, run a command to ensure the key vault is reachable."
-          json=$(az keyvault list --query "[].{name: name, rg: resourceGroup}" | jq .[])
-          name=$(jq -r '.name' <<< $json)
-          rg=$(jq -r '.rg' <<< $json)
-          if [[ -z "$name" || -z "$rg" ]]; then
-            echo "No key vault existing in this sub."
-          else
-            if [[ "$rg" == *"OpenAIWorkshop"* ]]; then
-              echo "We do have an OpenAIWorkshop rg. Assume that this KV is intended for this project"
-              az keyvault update -g $rg -n $name --default-action allow --public-network-access Enabled
-            fi
-          fi
-          
 
-
-  build-backend-container:
-    needs: preflight
-    uses: ./.github/workflows/docker-fastapi.yml
-    with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
-    secrets: inherit
-
-  build-mcp-container:
-    needs: preflight
-    uses: ./.github/workflows/docker-mcp.yml
-    with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
-    secrets: inherit
-
+  # Step 1: Deploy infrastructure FIRST (creates ACR, Container Apps, etc.)
   deploy-infrastructure:
-    needs: [ build-backend-container, build-mcp-container ]
+    needs: preflight
     uses: ./.github/workflows/infrastructure.yml
     with:
       environment: >-
@@ -125,9 +62,94 @@ jobs:
         }}
     secrets: inherit
 
+  # Step 2: Build containers AFTER infrastructure exists (ACR is now available)
+  build-application-container:
+    needs: deploy-infrastructure
+    uses: ./.github/workflows/docker-application.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  build-mcp-container:
+    needs: deploy-infrastructure
+    uses: ./.github/workflows/docker-mcp.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  # Step 3: Update Container Apps with new images after builds complete
+  update-containers:
+    needs: [ build-application-container, build-mcp-container ]
+    if: always() && (needs.build-application-container.result == 'success' || needs.build-mcp-container.result == 'success')
+    uses: ./.github/workflows/update-containers.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+    secrets: inherit
+
+  # Step 4: Run integration tests AFTER containers are deployed and running
+  integration-tests:
+    needs: [ deploy-infrastructure, update-containers ]
+    if: always() && needs.update-containers.result == 'success'
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      environment: >-
+        ${{
+          inputs.target_env
+          || (github.event_name == 'pull_request' && (
+               github.base_ref == 'tjs-infra-as-code' && 'dev'
+            || github.base_ref == 'int-agentic'        && 'integration'
+            || github.base_ref == 'main'               && 'prod'
+          ))
+          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
+          || (github.ref_name == 'int-agentic'        && 'integration')
+          || (github.ref_name == 'main'               && 'prod')
+          || 'dev'
+        }}
+      backend_endpoint: ${{ needs.deploy-infrastructure.outputs.backend_endpoint }}
+      mcp_endpoint: ${{ needs.deploy-infrastructure.outputs.mcp_endpoint }}
+      mcp_internal_only: true
+    secrets: inherit
+
+  # Optional: Destroy infrastructure (only for test branches)
   destroy-infrastructure:
-    needs: [ deploy-infrastructure ]
-    if: always() && (github.ref_name == 'tjs-infra-as-code' || (inputs.target_env && inputs.target_env == 'dev')) && needs.deploy-infrastructure.result == 'success'
+    needs: [ integration-tests ]
+    if: always() && (github.ref_name == 'tjs-infra-as-code' || github.ref_name == 'james-dev' || (inputs.target_env && inputs.target_env == 'dev')) && needs.integration-tests.result == 'success'
     uses: ./.github/workflows/destroy.yml
     with:
       environment: >-

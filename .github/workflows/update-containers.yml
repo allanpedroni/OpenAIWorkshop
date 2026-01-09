@@ -1,0 +1,110 @@
+name: Update Container Apps with Latest Images
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      mcp_image_tag:
+        type: string
+        required: false
+        default: 'latest'
+      backend_image_tag:
+        type: string
+        required: false
+        default: 'latest'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, integration, prod]
+        required: true
+      mcp_image_tag:
+        description: MCP image tag to deploy
+        default: 'latest'
+        required: false
+      backend_image_tag:
+        description: Backend image tag to deploy
+        default: 'latest'
+        required: false
+
+jobs:
+  update-containers:
+    name: Update Container Apps
+    runs-on: ubuntu-latest
+    # environment: ${{ inputs.environment }}  # Commented out to use repo-level variables
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine Resource Names
+        id: names
+        run: |
+          # Resource naming follows Terraform pattern
+          PROJECT="${{ vars.PROJECT_NAME || 'OpenAIWorkshop' }}"
+          ENV="${{ inputs.environment || 'dev' }}"
+          ITERATION="${{ vars.ITERATION || '002' }}"
+          
+          # Resource group name: rg-{project}-{env}-{iteration}
+          echo "resource_group=rg-${PROJECT}-${ENV}-${ITERATION}" >> $GITHUB_OUTPUT
+          
+          # Container app names: ca-{service}-{iteration}
+          echo "mcp_app=ca-mcp-${ITERATION}" >> $GITHUB_OUTPUT
+          echo "backend_app=ca-be-${ITERATION}" >> $GITHUB_OUTPUT
+          
+          # ACR name follows Terraform pattern: {project}{env}acr{iteration}
+          ACR_NAME="${PROJECT}${ENV}acr${ITERATION}"
+          echo "acr_name=${ACR_NAME}" >> $GITHUB_OUTPUT
+          echo "acr_server=${ACR_NAME}.azurecr.io" >> $GITHUB_OUTPUT
+          echo "Using ACR: ${ACR_NAME}"
+
+      - name: Update MCP Container App
+        continue-on-error: true
+        run: |
+          echo "Updating MCP Container App: ${{ steps.names.outputs.mcp_app }}"
+          az containerapp update \
+            --resource-group ${{ steps.names.outputs.resource_group }} \
+            --name ${{ steps.names.outputs.mcp_app }} \
+            --image "${{ steps.names.outputs.acr_server }}/mcp-service:${{ inputs.mcp_image_tag || 'latest' }}" \
+            --output none
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ MCP Container App updated successfully"
+          else
+            echo "⚠️ MCP Container App update failed (may not exist yet)"
+          fi
+
+      - name: Update Backend Container App
+        continue-on-error: true
+        run: |
+          echo "Updating Backend Container App: ${{ steps.names.outputs.backend_app }}"
+          az containerapp update \
+            --resource-group ${{ steps.names.outputs.resource_group }} \
+            --name ${{ steps.names.outputs.backend_app }} \
+            --image "${{ steps.names.outputs.acr_server }}/backend-app:${{ inputs.backend_image_tag || 'latest' }}" \
+            --output none
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Backend Container App updated successfully"
+          else
+            echo "⚠️ Backend Container App update failed (may not exist yet)"
+          fi
+
+      - name: Verify Deployments
+        run: |
+          echo "=== Container App Status ==="
+          az containerapp list \
+            --resource-group ${{ steps.names.outputs.resource_group }} \
+            --query "[].{Name:name, Image:properties.template.containers[0].image, Status:properties.provisioningState}" \
+            --output table || echo "Could not retrieve container app status"
