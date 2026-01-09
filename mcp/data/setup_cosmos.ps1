@@ -197,7 +197,7 @@ try {
     Write-Info "  Authentication: Azure CLI (Current User)"
     Write-Info ""
     Write-Info "Next steps:"
-    Write-Info "  1. Update mcp_service.py to use Cosmos DB"
+    Write-Info "  1. Set USE_COSMOSDB=true in your .env file to enable Cosmos DB backend"
     Write-Info "  2. Test the MCP service with: python mcp_service.py"
 
 } catch {

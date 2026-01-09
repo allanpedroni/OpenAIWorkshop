@@ -22,7 +22,7 @@ USE_COSMOSDB = os.getenv("USE_COSMOSDB", "false").lower() in ("true", "1", "yes"
 
 if USE_COSMOSDB:
     # Import all functions from Cosmos DB backend
-    from ._backend_cosmos import (
+    from _backend_cosmos import (
         get_all_customers_async,
         get_customer_detail_async,
         get_customer_orders_async,
@@ -46,7 +46,7 @@ if USE_COSMOSDB:
     _BACKEND = "cosmosdb"
 else:
     # Import all functions from SQLite backend
-    from ._backend_sqlite import (
+    from _backend_sqlite import (
         get_all_customers_async,
         get_customer_detail_async,
         get_customer_orders_async,
