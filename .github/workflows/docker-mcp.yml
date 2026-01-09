@@ -48,7 +48,9 @@ jobs:
 
       - name: Login to Azure Container Registry
         run: |
-          az acr login --name ${{ vars.ACR_NAME }}
+          # Get ACR access token using the OIDC-authenticated Azure CLI session
+          ACR_TOKEN=$(az acr login --name ${{ vars.ACR_NAME }} --expose-token --query accessToken -o tsv)
+          echo "$ACR_TOKEN" | docker login ${{ vars.ACR_NAME }}.azurecr.io --username 00000000-0000-0000-0000-000000000000 --password-stdin
 
       - name: Build and Push Image
         run: |
