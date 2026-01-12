@@ -1,29 +1,23 @@
-# Enterprise-Ready Agentic AI  Workshop
+# Enterprise-Ready Agentic AI Architecture
 
-**Build and deploy secure, end-to-end agentic AI solutions on Azure**
-
----
-
-## Who Is This For
-
-Infrastructure engineers and enterprise architects with in-depth Azure knowledge who need to deploy agentic AI in an enterprise-grade manner.
+**From prototype to production: a secure, end-to-end blueprint for agentic AI on Azure**
 
 ---
 
-## What You'll Learn
+## What We Added
 
-- ✅ **End-to-end agentic architecture** — Database → MCP tools → Agent orchestration → Backend → Frontend
-- ✅ **Your choice of IaC** — Bicep or Terraform, manual scripts or GitHub Actions
-- ✅ **Modern identity principles** — OIDC for GitHub Actions, Managed Identity for Azure services (no keys)
-- ✅ **Network isolation** — VNet with private endpoints, only frontend exposed to internet
-- ✅ **Automated CI/CD pipelines** — GitHub Actions, parallel container builds, integration testing, multi-environment deployment
-- ✅ **Enterprise-ready template** — Scalable, reusable blueprint for standalone or landing zone deployment
-
----
+| Feature | Description |
+|---------|-------------|
+| ✅ End-to-end agentic AI reference architecture | Complete stack from MCP tools → Agent orchestration → Backend → Frontend |
+| ✅ Enterprise security by default | VNet integration, private endpoints, zero-trust managed identity |
+| ✅ No secrets, no public exposure | Internal MCP, RBAC everywhere, HTTPS ingress only |
+| ✅ Production-ready automation | Terraform/Bicep IaC + GitHub Actions CI/CD with OIDC |
 
 ## Why It Matters
 
-Most agentic AI samples stop at proof-of-concept — public endpoints, API keys, no network isolation. This workshop provides a **repeatable, production-ready blueprint** from Dev → Prod.
+| Gap | Solution |
+|-----|----------|
+| ❗ Industry lacks clear guidance for enterprise-grade agentic AI | ✅ Repeatable, opinionated blueprint from Dev → Prod |
 
 ---
 
