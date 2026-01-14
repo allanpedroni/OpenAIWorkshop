@@ -6,3 +6,7 @@ requests
 azure-identity
 azure-keyvault-secrets
 fastmcp
+
+# Agent Evaluation dependencies
+azure-ai-evaluation
+python-dotenv
