@@ -1,0 +1,190 @@
+name: Agent Evaluation
+
+on:
+  # Run on PR when agent/evaluation code changes
+  pull_request:
+    paths:
+      - 'agentic_ai/agents/**'
+      - 'agentic_ai/evaluations/**'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, integration]
+        default: dev
+      agent_name:
+        description: 'Agent name for evaluation tracking'
+        type: string
+        default: 'ci-agent'
+      limit:
+        description: 'Limit number of test cases (0 = all)'
+        type: number
+        default: 5
+      eval_type:
+        description: 'Evaluation type'
+        type: choice
+        options: [all, single-turn-only, multi-turn-only]
+        default: all
+      push_to_foundry:
+        description: 'Push results to Azure AI Foundry'
+        type: boolean
+        default: false
+  
+  # Callable from other workflows
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: false
+        default: 'dev'
+      backend_endpoint:
+        type: string
+        required: true
+        description: 'Backend API endpoint URL'
+      mcp_endpoint:
+        type: string
+        required: true
+        description: 'MCP service endpoint URL'
+      agent_name:
+        type: string
+        required: false
+        default: 'ci-agent'
+      limit:
+        type: number
+        required: false
+        default: 0
+      push_to_foundry:
+        type: boolean
+        required: false
+        default: false
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ============================================================================
+  # Evaluation - Run agent evaluation against test scenarios
+  # ============================================================================
+  evaluate:
+    name: Agent Evaluation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # For OIDC authentication
+    
+    environment: ${{ inputs.environment || 'dev' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      
+      - name: Install dependencies
+        run: |
+          cd agentic_ai/applications
+          uv sync
+      
+      - name: Azure Login (OIDC)
+        if: ${{ inputs.push_to_foundry == true }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Get Azure credentials from Key Vault
+        if: ${{ inputs.push_to_foundry == true }}
+        run: |
+          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
+          
+          if [ -n "$KEYVAULT_NAME" ]; then
+            AOAI_KEY=$(az keyvault secret show --vault-name "$KEYVAULT_NAME" --name "aoai-key" --query value -o tsv 2>/dev/null || echo "")
+            echo "::add-mask::$AOAI_KEY"
+            echo "AZURE_OPENAI_API_KEY=$AOAI_KEY" >> $GITHUB_ENV
+            
+            AI_PROJECT_ENDPOINT=$(az keyvault secret show --vault-name "$KEYVAULT_NAME" --name "ai-project-endpoint" --query value -o tsv 2>/dev/null || echo "")
+            echo "AZURE_AI_PROJECT_ENDPOINT=$AI_PROJECT_ENDPOINT" >> $GITHUB_ENV
+          fi
+      
+      - name: Run Agent Evaluation
+        run: |
+          cd agentic_ai/applications
+          
+          # Build command
+          CMD="uv run python ../evaluations/run_agent_eval.py"
+          CMD="$CMD --agent ${{ inputs.agent_name || 'ci-agent' }}"
+          CMD="$CMD --backend-url ${{ inputs.backend_endpoint || 'http://localhost:7000' }}"
+          
+          # Add limit if specified
+          if [ "${{ inputs.limit }}" != "0" ] && [ -n "${{ inputs.limit }}" ]; then
+            CMD="$CMD --limit ${{ inputs.limit }}"
+          fi
+          
+          # Add eval type filter
+          if [ "${{ inputs.eval_type }}" == "single-turn-only" ]; then
+            CMD="$CMD --single-turn-only"
+          elif [ "${{ inputs.eval_type }}" == "multi-turn-only" ]; then
+            CMD="$CMD --multi-turn-only"
+          fi
+          
+          # Add remote flag if pushing to Foundry
+          if [ "${{ inputs.push_to_foundry }}" == "true" ]; then
+            CMD="$CMD --remote"
+          else
+            CMD="$CMD --local"
+          fi
+          
+          echo "Running: $CMD"
+          $CMD
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_CHAT_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_API_VERSION: '2025-03-01-preview'
+          MCP_SERVER_URI: ${{ inputs.mcp_endpoint || 'http://localhost:8000/mcp' }}
+      
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-results
+          path: |
+            agentic_ai/evaluations/eval_results/
+            agentic_ai/evaluations/evaluation_input_data.jsonl
+          retention-days: 30
+      
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## 📊 Agent Evaluation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent | ${{ inputs.agent_name || 'ci-agent' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Eval Type | ${{ inputs.eval_type || 'all' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Limit | ${{ inputs.limit || 'all' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Push to Foundry | ${{ inputs.push_to_foundry || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Metrics Evaluated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Single-Turn (tool-focused):**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tool behavior (recall, precision, efficiency)" >> $GITHUB_STEP_SUMMARY
+          echo "- Completeness, response quality, grounded accuracy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Multi-Turn (outcome-focused):**" >> $GITHUB_STEP_SUMMARY
+          echo "- Solution accuracy, task adherence, intent resolution" >> $GITHUB_STEP_SUMMARY
+          echo "- Coherence, fluency, relevance" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📁 See artifacts for detailed results" >> $GITHUB_STEP_SUMMARY
