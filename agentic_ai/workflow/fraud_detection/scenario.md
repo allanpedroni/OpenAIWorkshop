@@ -13,10 +13,10 @@ Contoso’s automated systems flag suspicious account activity, but certain case
 3. **Fan-In** to `FraudRiskAggregatorExecutor`:  
    - Produces `FraudRiskScore` and recommended action (lock account, refund charges, ignore).  
 4. **SwitchCaseEdgeRunner**:  
-   - If risk score ≥ threshold → route to `RequestInfoExecutor` for human fraud analyst review.  
+   - If risk score ≥ threshold → route to `ReviewGatewayExecutor` for human fraud analyst review.  
    - Else → route to `AutoClearExecutor`.  
-5. **RequestInfoExecutor** → sends “Fraud Case Review Request” to analyst with full context.  
-6. **Workflow pauses** — checkpoint saved.  
+5. **ReviewGatewayExecutor** → uses `ctx.request_info()` to request analyst review with full context.  
+6. **Workflow pauses** — checkpoint saved automatically.
 7. **Analyst decides** (approve lock/refund or clear).  
 8. Workflow resumes:  
    - `FraudActionExecutor` → performs chosen action (e.g., lock account, reverse charges).  

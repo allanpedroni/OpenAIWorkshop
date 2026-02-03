@@ -37,9 +37,9 @@ This example demonstrates a comprehensive fraud detection system using the Agent
      (High Risk ≥0.6)                  (Low Risk <0.6)
             ↓                                 ↓
     ┌──────────────┐                 ┌──────────────┐
-    │   Analyst    │                 │  Auto Clear  │
-    │   Review     │                 │  Executor    │
-    │ (Human Input)│                 └──────┬───────┘
+    │   Review     │                 │  Auto Clear  │
+    │   Gateway    │                 │  Executor    │
+    │(Human Input) │                 └──────┬───────┘
     └──────┬───────┘                        │
            ↓                                 │
     ┌──────────────┐                        │
@@ -80,10 +80,10 @@ This example demonstrates a comprehensive fraud detection system using the Agent
   - **Low risk (<0.6)**: Auto-clear
 
 ### 5. **Human-in-the-Loop**
-- Uses `RequestInfoExecutor` for analyst review
-- Workflow pauses and creates checkpoint
+- Uses `ctx.request_info()` API for analyst review within `ReviewGatewayExecutor`
+- Workflow pauses and creates checkpoint automatically
 - Analyst provides decision (lock account, refund charges, clear, both)
-- Workflow resumes with analyst's decision
+- `@response_handler` decorator processes the response when workflow resumes
 
 ### 6. **Checkpointing**
 - Workflow state saved at each superstep
@@ -103,8 +103,8 @@ This example demonstrates a comprehensive fraud detection system using the Agent
 2. **SuspiciousActivityAlert** → [UsagePattern, Location, Billing] (fan-out)
 3. **[UsageAnalysisResult, LocationAnalysisResult, BillingAnalysisResult]** → Aggregator (fan-in)
 4. **FraudRiskAssessment** → Switch (risk score check)
-5. **FraudRiskAssessment** → AnalystReview OR AutoClear
-6. **AnalystDecision** → FraudAction (if high risk)
+5. **FraudRiskAssessment** → ReviewGateway OR AutoClear
+6. **AnalystDecision** → FraudAction (if high risk, after human review)
 7. **ActionResult** → FinalNotification
 8. **FinalNotification** → Workflow output
 
@@ -260,7 +260,7 @@ instructions=(
 1. **Fan-Out Pattern**: One message → multiple executors
 2. **Fan-In Pattern**: Multiple messages → one executor (waits for all)
 3. **Switch/Case Routing**: Conditional routing based on message content
-4. **Human-in-the-Loop**: Workflow pause/resume with external input
+4. **Human-in-the-Loop**: Workflow pause/resume with `ctx.request_info()` and `@response_handler`
 5. **Checkpointing**: Persistent workflow state across restarts
 6. **MCP Tool Integration**: Domain-specific tool filtering
 7. **LLM Agent Executors**: AI-powered decision making
@@ -389,6 +389,17 @@ http://localhost:3000
 
 - Check WebSocket connection in DevTools
 - Verify events are being sent from backend
+
+**Checkpoint Encoding Error (Windows):**
+
+- If you see `'charmap' codec can't encode character` errors, the backend uses `UTF8FileCheckpointStorage` wrapper to handle Unicode characters in LLM output
+- Ensure you're using the latest backend.py which includes this fix
+
+**Analyst Decision Not Resuming Workflow:**
+
+- Check that the checkpoint was created successfully (no encoding errors in logs)
+- Verify the `request_id` matches between the decision and the pending request
+- Check backend logs for `continue_workflow` messages
 
 
 ## License

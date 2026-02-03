@@ -188,16 +188,16 @@ Additional checks:
 
 ### Change Analyst Instructions
 
-**Location**: `create_fraud_detection_workflow()`
+**Location**: `ReviewGatewayExecutor` class in `fraud_detection_workflow.py`
 
 ```python
-analyst_review = RequestInfoExecutor(
-    name="analyst_review",
-    request_info={
-        "type": "fraud_analyst_review",
-        "instructions": "YOUR CUSTOM INSTRUCTIONS HERE"
-    },
-)
+# The AnalystReviewRequest dataclass contains the request details
+@dataclass
+class AnalystReviewRequest:
+    alert_id: str
+    customer_id: int
+    risk_assessment: FraudRiskAssessment
+    instructions: str = "Review the risk assessment and decide on action"
 ```
 
 ### Modify Action Logic

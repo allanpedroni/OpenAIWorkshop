@@ -14,7 +14,7 @@ Successfully implemented the Contoso Fraud Detection & Escalation Workflow as sp
   - BillingChargeExecutor
 - ✅ FraudRiskAggregatorExecutor (LLM-based fan-in)
 - ✅ Switch/case routing based on risk score
-- ✅ RequestInfoExecutor for human-in-the-loop
+- ✅ ReviewGatewayExecutor for human-in-the-loop (uses ctx.request_info API)
 - ✅ AutoClearExecutor for low-risk cases
 - ✅ FraudActionExecutor for action execution
 - ✅ FinalNotificationExecutor for completion
@@ -52,14 +52,16 @@ builder.add_switch_case_edge(
 
 #### Human-in-the-Loop
 ```python
-# Workflow pauses for analyst review
-analyst_review = RequestInfoExecutor(
-    name="analyst_review",
-    request_info={
-        "type": "fraud_analyst_review",
-        "instructions": "Review the risk assessment..."
-    },
-)
+# ReviewGatewayExecutor uses ctx.request_info() to pause workflow
+class ReviewGatewayExecutor(Executor):
+    async def handle_assessment(self, ctx, assessment: FraudRiskAssessment):
+        request = AnalystReviewRequest(...)
+        await ctx.request_info(request, AnalystDecision)
+    
+    @response_handler
+    async def handle_analyst_response(self, ctx, decision: AnalystDecision):
+        # Process the analyst decision when workflow resumes
+        await ctx.send_message(decision)
 ```
 
 ### 3. **MCP Tool Integration**
@@ -113,15 +115,20 @@ The `FraudRiskAggregatorExecutor` uses an LLM agent to:
 
 ```python
 # Workflow state saved at each superstep
-checkpoint_storage = InMemoryCheckpointStorage()
-workflow = await create_fraud_detection_workflow(
+# Using UTF8FileCheckpointStorage wrapper for Windows compatibility
+checkpoint_storage = UTF8FileCheckpointStorage("./checkpoints")
+workflow = create_fraud_detection_workflow(
     ...,
     checkpoint_storage=checkpoint_storage
 )
 
-# Can pause/resume indefinitely
-checkpoint_id = await workflow.create_checkpoint()
-await workflow.restore_from_checkpoint(checkpoint_id)
+# Resume from checkpoint after analyst decision
+async for event in workflow.run_stream(checkpoint_id=checkpoint_id):
+    process_event(event)
+
+# Send responses and continue workflow
+async for event in workflow.send_responses_streaming(responses):
+    process_event(event)
 ```
 
 ## 📁 Files Created
@@ -224,7 +231,7 @@ Learned how to wait for multiple inputs before proceeding (aggregation).
 Learned conditional routing based on message content and business logic.
 
 ### ✅ Human-in-the-Loop
-Learned workflow pause/resume with external input using `RequestInfoExecutor`.
+Learned workflow pause/resume with external input using `ctx.request_info()` and `@response_handler` decorator.
 
 ### ✅ Checkpointing
 Learned persistent workflow state for long-running processes.
@@ -346,16 +353,18 @@ class FraudRiskAggregatorExecutor(Executor):
 ### Workflow Pause/Resume
 
 ```python
-# Workflow automatically pauses at RequestInfoExecutor
+# Workflow automatically pauses when ctx.request_info() is called
 async for event in workflow.run_stream(alert):
-    if hasattr(event, "request_info"):
-        # Wait for analyst decision
-        decision = await get_analyst_decision()
+    if isinstance(event, RequestInfoEvent):
+        # Workflow is now paused, waiting for analyst decision
+        request_id = event.request_id
         
-        # Resume workflow
-        await workflow.send_responses({decision})
-        async for event in workflow.run_stream(alert):
-            # Continues from where it paused
+        # ... Get analyst decision from UI ...
+        
+        # Resume workflow with the response
+        responses = {request_id: analyst_decision}
+        async for event in workflow.send_responses_streaming(responses):
+            # @response_handler processes the decision
             process_event(event)
 ```
 
