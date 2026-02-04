@@ -32,8 +32,8 @@ Welcome to the official repository for the Microsoft AI Agentic Workshop! This r
 ## Key Features  
 
 - **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework) Integration** - Single-agent, multi-agent Magentic orchestration, and handoff-based domain routing with MCP tools. [Pattern guide →](agentic_ai/agents/agent_framework/README.md)
-- **[Workflow Orchestration](agentic_ai/workflow/)** - Pregel-style execution, checkpointing, human-in-the-loop patterns, and real-time observability. [Fraud Detection Demo →](agentic_ai/workflow/fraud_detection/)
-- **Advanced UI Options** - React frontend with streaming visualization or Streamlit for quick prototyping
+- **[Workflow Orchestration](agentic_ai/workflow/)** - Hybrid Workflow + Durable Task architecture with fan-out/fan-in topology, human-in-the-loop, and real-time observability. [Fraud Detection Demo →](agentic_ai/workflow/fraud_detection_durable/)
+- **Advanced UI Options** - React frontend with interactive workflow visualization and step-by-step tool call details
 - **[MCP Server Integration](mcp/)** - Model Context Protocol for enhanced agent tool capabilities with advanced features: authentication, RBAC, and APIM integration
 - **[Emerging Agentic Scenarios](agentic_ai/scenarios/)** - Long-running workflows, progress updates, and durable agent patterns
 - **Agent State & History Persistence** - In-memory or CosmosDB backend for conversation history and agent state
@@ -46,7 +46,7 @@ Welcome to the official repository for the Microsoft AI Agentic Workshop! This r
 1. Review the [Setup Instructions](./SETUP.md) for environment prerequisites and step-by-step installation.  
 2. Explore the [Business Scenario and Agent Design](./SCENARIO.md) to understand the workshop challenge.  
 3. Check out the **[Agent Framework Implementation Patterns](agentic_ai/agents/agent_framework/README.md)** to choose the right multi-agent approach (single-agent, Magentic orchestration, or handoff pattern).
-4. Try the **[Fraud Detection Workflow Demo](agentic_ai/workflow/fraud_detection/)** to see enterprise orchestration patterns in action.
+4. Try the **[Durable Fraud Detection Workflow](agentic_ai/workflow/fraud_detection_durable/)** to see hybrid Workflow + Durable Task orchestration with human-in-the-loop.
 5. Dive into [System Architecture](./ARCHITECTURE.md) before building and customizing your agent solutions.  
 6. Utilize the [Support Guide](./SUPPORT.md) for troubleshooting and assistance.  
 
