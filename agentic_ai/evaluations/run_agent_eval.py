@@ -73,9 +73,6 @@ print("=" * 80)
 # Import evaluation framework
 from evaluations import AgentEvaluationRunner, AgentTrace
 
-# Import utilities
-from applications.utils import get_state_store
-
 
 class ToolCallTracker:
     """Captures tool calls emitted via the agent's WebSocket-style broadcast.
@@ -595,7 +592,7 @@ async def main():
     parser.add_argument("--agent", default=None, 
                         help="Agent type: single, reflection, handoff (overrides --agent-name)")
     parser.add_argument("--agent-name", default="agent_eval", help="Name for telemetry tracking")
-    parser.add_argument("--backend-url", default="http://localhost:700", help="Backend URL to send requests to")
+    parser.add_argument("--backend-url", default="http://localhost:7000", help="Backend URL to send requests to")
     parser.add_argument("--remote", action="store_true", help="Run evaluation in Azure AI Foundry portal only (skip local)")
     parser.add_argument("--local", action="store_true", help="Run local evaluation only (default if neither specified)")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of test cases to run (0 = all)")
