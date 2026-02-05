@@ -32,6 +32,22 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   tags: tags
 }
 
+// Application Insights for observability
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${baseName}-${environmentName}-appinsights'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
+  }
+  tags: tags
+}
+
 output workspaceId string = logAnalytics.id
 output customerId string = logAnalytics.properties.customerId
 output workspaceName string = logAnalytics.name
+output applicationInsightsConnectionString string = applicationInsights.properties.ConnectionString
+output applicationInsightsInstrumentationKey string = applicationInsights.properties.InstrumentationKey

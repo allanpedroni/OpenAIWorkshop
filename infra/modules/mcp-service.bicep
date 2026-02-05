@@ -139,5 +139,6 @@ resource mcpService 'Microsoft.App/containerApps@2023-05-01' = {
 }
 
 output serviceUrl string = 'https://${mcpService.properties.configuration.ingress.fqdn}/mcp'
+output internalUrl string = 'http://${mcpService.name}/mcp'
 output serviceName string = mcpService.name
 output fqdn string = mcpService.properties.configuration.ingress.fqdn

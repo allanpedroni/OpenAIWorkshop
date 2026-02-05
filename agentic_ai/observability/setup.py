@@ -76,13 +76,16 @@ def setup_observability(
         enable_instrumentation(enable_sensitive_data=enable_sensitive_data)
         
         _initialized = True
+        print(f"✅ Application Insights observability enabled (service: {service_name})")
         logger.info(f"✅ Application Insights observability enabled (service: {service_name})")
         return True
         
     except ImportError as e:
+        print(f"❌ Observability dependencies not installed: {e}")
         logger.warning(f"Observability dependencies not installed: {e}")
         return False
     except Exception as e:
+        print(f"❌ Failed to configure observability: {e}")
         logger.warning(f"Failed to configure observability: {e}")
         return False
 

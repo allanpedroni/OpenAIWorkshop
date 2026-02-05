@@ -15,6 +15,7 @@ import {
 import SecurityIcon from '@mui/icons-material/Security';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import WorkflowVisualizer from './components/WorkflowVisualizer';
+import { API_CONFIG } from './constants/config';
 import ControlPanel from './components/ControlPanel';
 import AnalystDecisionPanel from './components/AnalystDecisionPanel';
 
@@ -57,7 +58,7 @@ function App() {
 
   // Load sample alerts on mount
   useEffect(() => {
-    fetch('http://localhost:8001/api/alerts')
+    fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ALERTS}`)
       .then((res) => res.json())
       .then((data) => setAlerts(data))
       .catch((err) => console.error('Error loading alerts:', err));
@@ -71,7 +72,7 @@ function App() {
   useEffect(() => {
     if (!instanceId) return;
 
-    const wsUrl = `ws://localhost:8001/ws/${instanceId}`;
+    const wsUrl = `${API_CONFIG.WS_URL}/${instanceId}`;
     console.log('Connecting to WebSocket:', wsUrl);
     
     ws.current = new WebSocket(wsUrl);
@@ -257,7 +258,7 @@ function App() {
     setStepDetails({});  // Reset step details for new workflow
 
     try {
-      const response = await fetch('http://localhost:8001/api/workflow/start', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_START}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +291,7 @@ function App() {
     console.log('Submitting decision:', decision);
 
     try {
-      const response = await fetch('http://localhost:8001/api/workflow/decision', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.WORKFLOW_DECISION}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -345,7 +346,7 @@ function App() {
         <Container maxWidth={false} sx={{ flex: 1, py: 3, overflow: 'hidden' }}>
           <Grid container spacing={2} sx={{ height: '100%' }}>
             {/* Left Column - Controls and Decision Panel */}
-            <Grid item xs={12} md={2} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Grid size={{ xs: 12, md: 2 }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <ControlPanel
                 alerts={alerts}
                 onStartWorkflow={handleStartWorkflow}
@@ -362,7 +363,7 @@ function App() {
             </Grid>
 
             {/* Center Column - Workflow Visualization */}
-            <Grid item xs={12} md={10}>
+            <Grid size={{ xs: 12, md: 10 }} sx={{ height: '100%' }}>
               <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
                   <Typography variant="h6">Workflow Graph</Typography>
@@ -373,8 +374,10 @@ function App() {
                     {orchestrationStatus && ` | Status: ${orchestrationStatus}`}
                   </Typography>
                 </Box>
-                <Box sx={{ flex: 1, position: 'relative' }}>
-                  <WorkflowVisualizer executorStates={executorStates} stepDetails={stepDetails} />
+                <Box sx={{ flex: 1, minHeight: 400, position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                    <WorkflowVisualizer executorStates={executorStates} stepDetails={stepDetails} />
+                  </div>
                 </Box>
               </Paper>
             </Grid>

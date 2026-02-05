@@ -158,6 +158,26 @@ module application 'modules/application.bicep' = {
   }
 }
 
+// Fraud Detection Durable Workflow Container App (includes DTS + Worker + Backend)
+module fraudWorkflow 'modules/fraud-workflow.bicep' = {
+  scope: rg
+  name: 'fraud-workflow-deployment'
+  params: {
+    location: location
+    baseName: '${baseName}-${environmentName}'
+    containerAppsEnvironmentId: containerAppsEnv.outputs.environmentId
+    containerRegistryName: acr.outputs.registryName
+    azureOpenAIEndpoint: openai.outputs.endpoint
+    azureOpenAIKey: openai.outputs.key
+    azureOpenAIDeploymentName: openai.outputs.chatDeploymentName
+    mcpServiceUrl: mcpService.outputs.internalUrl
+    userAssignedIdentityResourceId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.resourceId : ''
+    userAssignedIdentityClientId: useCosmosManagedIdentity ? containerAppsIdentity.outputs.clientId : ''
+    applicationInsightsConnectionString: logAnalytics.outputs.applicationInsightsConnectionString
+    tags: tags
+  }
+}
+
 // Outputs
 output resourceGroupName string = rg.name
 output location string = location
@@ -166,4 +186,5 @@ output cosmosDbEndpoint string = cosmosdb.outputs.endpoint
 output containerRegistryName string = acr.outputs.registryName
 output mcpServiceUrl string = mcpService.outputs.serviceUrl
 output applicationUrl string = application.outputs.applicationUrl
+output fraudWorkflowUrl string = fraudWorkflow.outputs.url
 output containerAppsEnvironmentId string = containerAppsEnv.outputs.environmentId

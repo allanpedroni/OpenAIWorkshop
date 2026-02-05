@@ -2,99 +2,150 @@
 #    uv pip compile pyproject.toml -o requirements.txt
 a2a-sdk==0.3.12
     # via agent-framework-a2a
-agent-framework==1.0.0b251028
+ag-ui-protocol==0.1.10
+    # via agent-framework-ag-ui
+agent-framework==1.0.0b260130
     # via applications (pyproject.toml)
 agent-framework-a2a==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
+agent-framework-ag-ui==1.0.0b260130
+    # via agent-framework-core
+agent-framework-anthropic==1.0.0b260130
+    # via agent-framework-core
 agent-framework-azure-ai==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
+agent-framework-azure-ai-search==1.0.0b260130
+    # via agent-framework-core
+agent-framework-azurefunctions==1.0.0b260130
+    # via agent-framework-core
+agent-framework-chatkit==1.0.0b260130
+    # via agent-framework-core
 agent-framework-copilotstudio==1.0.0b251114
-    # via agent-framework
-agent-framework-core==1.0.0b251114
+    # via agent-framework-core
+agent-framework-core==1.0.0b260130
     # via
     #   agent-framework
     #   agent-framework-a2a
+    #   agent-framework-ag-ui
+    #   agent-framework-anthropic
     #   agent-framework-azure-ai
+    #   agent-framework-azure-ai-search
+    #   agent-framework-azurefunctions
+    #   agent-framework-chatkit
     #   agent-framework-copilotstudio
+    #   agent-framework-declarative
     #   agent-framework-devui
+    #   agent-framework-durabletask
+    #   agent-framework-github-copilot
     #   agent-framework-lab
     #   agent-framework-mem0
+    #   agent-framework-ollama
     #   agent-framework-purview
     #   agent-framework-redis
+agent-framework-declarative==1.0.0b260130
+    # via agent-framework-core
 agent-framework-devui==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
+agent-framework-durabletask==1.0.0b260130
+    # via
+    #   agent-framework-azurefunctions
+    #   agent-framework-core
+agent-framework-github-copilot==1.0.0b260130
+    # via agent-framework-core
 agent-framework-lab==1.0.0b251024
-    # via agent-framework
+    # via agent-framework-core
 agent-framework-mem0==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
+agent-framework-ollama==1.0.0b260130
+    # via agent-framework-core
 agent-framework-purview==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
 agent-framework-redis==1.0.0b251114
-    # via agent-framework
+    # via agent-framework-core
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.13.2
     # via
     #   agent-framework-azure-ai
-    #   semantic-kernel
-aioice==0.10.1
-    # via aiortc
-aiortc==1.14.0
-    # via semantic-kernel
+    #   azure-ai-evaluation
+    #   azure-functions-durable
 aiosignal==1.4.0
     # via aiohttp
 altair==5.6.0.dev20251110
     # via streamlit
 annotated-types==0.7.0
     # via pydantic
+anthropic==0.78.0
+    # via agent-framework-anthropic
 anyio==4.11.0
     # via
+    #   anthropic
     #   httpx
     #   mcp
     #   openai
     #   sse-starlette
     #   starlette
     #   watchfiles
+asgiref==3.11.1
+    # via opentelemetry-instrumentation-asgi
+asyncio==4.0.0
+    # via durabletask
 attrs==25.4.0
     # via
     #   aiohttp
     #   jsonschema
     #   referencing
-autogen-agentchat==0.7.1
-    # via applications (pyproject.toml)
-autogen-core==0.7.1
-    # via
-    #   autogen-agentchat
-    #   autogen-ext
-autogen-ext==0.7.1
-    # via applications (pyproject.toml)
-av==16.0.1
-    # via aiortc
 azure-ai-agents==1.2.0b5
-    # via
-    #   agent-framework-azure-ai
-    #   semantic-kernel
+    # via agent-framework-azure-ai
+azure-ai-evaluation==1.14.0
+    # via applications (pyproject.toml)
 azure-ai-projects==2.0.0b2
     # via
+    #   applications (pyproject.toml)
     #   agent-framework-azure-ai
-    #   semantic-kernel
+azure-common==1.1.28
+    # via azure-search-documents
 azure-core==1.36.0
     # via
     #   agent-framework-purview
     #   azure-ai-agents
+    #   azure-ai-evaluation
     #   azure-ai-projects
+    #   azure-core-tracing-opentelemetry
     #   azure-cosmos
     #   azure-identity
+    #   azure-monitor-opentelemetry
+    #   azure-monitor-opentelemetry-exporter
+    #   azure-search-documents
     #   azure-storage-blob
     #   microsoft-agents-hosting-core
+    #   msrest
+azure-core-tracing-opentelemetry==1.0.0b12
+    # via azure-monitor-opentelemetry
 azure-cosmos==4.9.0
     # via applications (pyproject.toml)
+azure-functions==1.25.0b3.dev3
+    # via
+    #   agent-framework-azurefunctions
+    #   azure-functions-durable
+azure-functions-durable==1.4.0
+    # via agent-framework-azurefunctions
 azure-identity==1.26.0b1
     # via
     #   agent-framework-core
-    #   semantic-kernel
+    #   azure-ai-evaluation
+    #   azure-monitor-opentelemetry-exporter
+    #   durabletask-azuremanaged
+azure-monitor-opentelemetry==1.8.6
+    # via applications (pyproject.toml)
+azure-monitor-opentelemetry-exporter==1.0.0b48
+    # via azure-monitor-opentelemetry
+azure-search-documents==11.7.0b2
+    # via agent-framework-azure-ai-search
 azure-storage-blob==12.27.1
-    # via azure-ai-projects
+    # via
+    #   azure-ai-evaluation
+    #   azure-ai-projects
 backoff==2.2.1
     # via posthog
 blinker==1.9.0
@@ -109,48 +160,52 @@ certifi==2025.11.12
     # via
     #   httpcore
     #   httpx
+    #   msrest
     #   requests
 cffi==2.0.0
     # via
+    #   clr-loader
     #   cryptography
-    #   pylibsrtp
-chardet==5.2.0
-    # via prance
+    #   powerfx
 charset-normalizer==3.4.4
     # via requests
 click==8.3.1
     # via
     #   flask
+    #   nltk
     #   streamlit
     #   uvicorn
-cloudevents==1.12.0
-    # via semantic-kernel
+clr-loader==0.2.10
+    # via pythonnet
 colorama==0.4.6
     # via
     #   click
+    #   griffe
     #   tqdm
     #   uvicorn
 cryptography==45.0.7
     # via
-    #   aiortc
     #   azure-identity
     #   azure-storage-blob
     #   msal
     #   pyjwt
-    #   pyopenssl
-defusedxml==0.8.0rc2
-    # via semantic-kernel
-deprecation==2.1.0
-    # via cloudevents
 distro==1.9.0
     # via
+    #   anthropic
     #   openai
     #   posthog
-dnspython==2.8.0
-    # via aioice
+docstring-parser==0.17.0
+    # via anthropic
+durabletask==1.3.0
+    # via
+    #   agent-framework-durabletask
+    #   durabletask-azuremanaged
+durabletask-azuremanaged==1.3.0
+    # via agent-framework-durabletask
 fastapi==0.115.12
     # via
     #   applications (pyproject.toml)
+    #   agent-framework-ag-ui
     #   agent-framework-devui
 flasgger==0.9.7.1
     # via applications (pyproject.toml)
@@ -162,25 +217,27 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
+furl==2.1.4
+    # via azure-functions-durable
 gitdb==4.0.12
     # via gitpython
+github-copilot-sdk==0.1.22
+    # via agent-framework-github-copilot
 gitpython==3.1.45
     # via streamlit
 google-api-core==2.28.1
     # via a2a-sdk
 google-auth==2.43.0
     # via google-api-core
-google-crc32c==1.7.1
-    # via aiortc
 googleapis-common-protos==1.72.0
-    # via
-    #   google-api-core
-    #   opentelemetry-exporter-otlp-proto-grpc
+    # via google-api-core
 greenlet==3.2.4
     # via sqlalchemy
+griffe==1.15.0
+    # via openai-agents
 grpcio==1.76.0
     # via
-    #   opentelemetry-exporter-otlp-proto-grpc
+    #   durabletask
     #   qdrant-client
 h11==0.16.0
     # via
@@ -199,7 +256,10 @@ httpx==0.28.1
     #   applications (pyproject.toml)
     #   a2a-sdk
     #   agent-framework-purview
+    #   anthropic
+    #   azure-ai-evaluation
     #   mcp
+    #   ollama
     #   openai
     #   qdrant-client
 httpx-sse==0.4.3
@@ -214,57 +274,48 @@ idna==3.11
     #   httpx
     #   requests
     #   yarl
-ifaddr==0.2.0
-    # via aioice
 importlib-metadata==8.7.0
     # via opentelemetry-api
 isodate==0.7.2
     # via
     #   azure-ai-agents
     #   azure-ai-projects
+    #   azure-search-documents
     #   azure-storage-blob
     #   microsoft-agents-hosting-core
-    #   openapi-core
+    #   msrest
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via
     #   altair
+    #   azure-ai-evaluation
     #   flask
+    #   openai-chatkit
     #   pydeck
-    #   semantic-kernel
 jiter==0.12.0
-    # via openai
+    # via
+    #   anthropic
+    #   openai
+joblib==1.5.3
+    # via nltk
 jsonpath-ng==1.7.0
     # via redisvl
-jsonref==1.1.0
-    # via autogen-core
 jsonschema==4.25.1
     # via
     #   altair
     #   flasgger
     #   mcp
-    #   openapi-core
-    #   openapi-schema-validator
-    #   openapi-spec-validator
-jsonschema-path==0.3.4
-    # via
-    #   openapi-core
-    #   openapi-spec-validator
 jsonschema-specifications==2025.9.1
-    # via
-    #   jsonschema
-    #   openapi-schema-validator
-lazy-object-proxy==1.12.0
-    # via openapi-spec-validator
+    # via jsonschema
 markupsafe==3.0.3
     # via
     #   jinja2
     #   werkzeug
-mcp==1.21.1
+mcp==1.26.0
     # via
     #   agent-framework-core
-    #   autogen-ext
+    #   openai-agents
 mem0ai==1.0.1
     # via agent-framework-mem0
 microsoft-agents-activity==0.6.0.dev17
@@ -277,8 +328,6 @@ mistune==3.1.4
     # via flasgger
 ml-dtypes==0.5.3
     # via redisvl
-more-itertools==10.8.0
-    # via openapi-core
 msal==1.31.0
     # via
     #   applications (pyproject.toml)
@@ -286,14 +335,18 @@ msal==1.31.0
     #   msal-extensions
 msal-extensions==1.3.1
     # via azure-identity
+msrest==0.7.1
+    # via
+    #   azure-ai-evaluation
+    #   azure-monitor-opentelemetry-exporter
 multidict==6.7.0
     # via
     #   aiohttp
     #   yarl
 narwhals==2.11.0
     # via altair
-nest-asyncio==1.6.0
-    # via semantic-kernel
+nltk==3.9.2
+    # via azure-ai-evaluation
 numpy==2.3.5
     # via
     #   agent-framework-redis
@@ -302,74 +355,135 @@ numpy==2.3.5
     #   pydeck
     #   qdrant-client
     #   redisvl
-    #   scipy
-    #   semantic-kernel
     #   streamlit
+oauthlib==3.3.1
+    # via requests-oauthlib
+ollama==0.6.1
+    # via agent-framework-ollama
 openai==2.8.0
     # via
     #   applications (pyproject.toml)
     #   agent-framework-core
+    #   azure-ai-evaluation
     #   mem0ai
-    #   semantic-kernel
-openapi-core==0.19.4
-    # via semantic-kernel
-openapi-schema-validator==0.6.3
-    # via
-    #   openapi-core
-    #   openapi-spec-validator
-openapi-spec-validator==0.7.2
-    # via openapi-core
-opentelemetry-api==1.38.0
+    #   openai-agents
+    #   openai-chatkit
+openai-agents==0.4.2
+    # via openai-chatkit
+openai-chatkit==1.6.0
+    # via agent-framework-chatkit
+opentelemetry-api==1.39.0
     # via
     #   agent-framework-core
-    #   autogen-core
-    #   opentelemetry-exporter-otlp-proto-grpc
+    #   azure-core-tracing-opentelemetry
+    #   azure-functions-durable
+    #   azure-monitor-opentelemetry-exporter
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-asgi
+    #   opentelemetry-instrumentation-dbapi
+    #   opentelemetry-instrumentation-django
+    #   opentelemetry-instrumentation-fastapi
+    #   opentelemetry-instrumentation-flask
+    #   opentelemetry-instrumentation-psycopg2
+    #   opentelemetry-instrumentation-requests
+    #   opentelemetry-instrumentation-urllib
+    #   opentelemetry-instrumentation-urllib3
+    #   opentelemetry-instrumentation-wsgi
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-    #   semantic-kernel
-opentelemetry-exporter-otlp-proto-common==1.38.0
-    # via opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-exporter-otlp-proto-grpc==1.38.0
-    # via agent-framework-core
-opentelemetry-proto==1.38.0
+opentelemetry-instrumentation==0.60b0
     # via
-    #   opentelemetry-exporter-otlp-proto-common
-    #   opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-sdk==1.38.0
+    #   opentelemetry-instrumentation-asgi
+    #   opentelemetry-instrumentation-dbapi
+    #   opentelemetry-instrumentation-django
+    #   opentelemetry-instrumentation-fastapi
+    #   opentelemetry-instrumentation-flask
+    #   opentelemetry-instrumentation-psycopg2
+    #   opentelemetry-instrumentation-requests
+    #   opentelemetry-instrumentation-urllib
+    #   opentelemetry-instrumentation-urllib3
+    #   opentelemetry-instrumentation-wsgi
+opentelemetry-instrumentation-asgi==0.60b0
+    # via opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-dbapi==0.60b0
+    # via opentelemetry-instrumentation-psycopg2
+opentelemetry-instrumentation-django==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-fastapi==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-flask==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-psycopg2==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-requests==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-urllib==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-urllib3==0.60b0
+    # via azure-monitor-opentelemetry
+opentelemetry-instrumentation-wsgi==0.60b0
+    # via
+    #   opentelemetry-instrumentation-django
+    #   opentelemetry-instrumentation-flask
+opentelemetry-resource-detector-azure==0.1.5
+    # via azure-monitor-opentelemetry
+opentelemetry-sdk==1.39.0
     # via
     #   agent-framework-core
-    #   opentelemetry-exporter-otlp-proto-grpc
-    #   semantic-kernel
-opentelemetry-semantic-conventions==0.59b0
-    # via opentelemetry-sdk
+    #   azure-functions-durable
+    #   azure-monitor-opentelemetry
+    #   azure-monitor-opentelemetry-exporter
+    #   opentelemetry-resource-detector-azure
+opentelemetry-semantic-conventions==0.60b0
+    # via
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-asgi
+    #   opentelemetry-instrumentation-dbapi
+    #   opentelemetry-instrumentation-django
+    #   opentelemetry-instrumentation-fastapi
+    #   opentelemetry-instrumentation-flask
+    #   opentelemetry-instrumentation-requests
+    #   opentelemetry-instrumentation-urllib
+    #   opentelemetry-instrumentation-urllib3
+    #   opentelemetry-instrumentation-wsgi
+    #   opentelemetry-sdk
 opentelemetry-semantic-conventions-ai==0.4.13
     # via agent-framework-core
+opentelemetry-util-http==0.60b0
+    # via
+    #   opentelemetry-instrumentation-asgi
+    #   opentelemetry-instrumentation-django
+    #   opentelemetry-instrumentation-fastapi
+    #   opentelemetry-instrumentation-flask
+    #   opentelemetry-instrumentation-requests
+    #   opentelemetry-instrumentation-urllib
+    #   opentelemetry-instrumentation-urllib3
+    #   opentelemetry-instrumentation-wsgi
+orderedmultidict==1.0.2
+    # via furl
 packaging==24.2
     # via
     #   agent-framework-core
     #   altair
-    #   deprecation
+    #   durabletask
     #   flasgger
-    #   prance
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-flask
     #   streamlit
 pandas==2.3.3
-    # via streamlit
-parse==1.20.2
-    # via openapi-core
-pathable==0.4.4
-    # via jsonschema-path
-pillow==11.3.0
     # via
-    #   autogen-core
+    #   azure-ai-evaluation
     #   streamlit
+pillow==11.3.0
+    # via streamlit
 ply==3.11
     # via jsonpath-ng
 portalocker==3.2.0
     # via qdrant-client
 posthog==7.0.1
     # via mem0ai
-prance==25.4.8.0
-    # via semantic-kernel
+powerfx==0.0.34
+    # via agent-framework-declarative
 propcache==0.4.1
     # via
     #   aiohttp
@@ -379,15 +493,15 @@ proto-plus==1.26.1
 protobuf==5.29.5
     # via
     #   a2a-sdk
-    #   autogen-core
+    #   durabletask
     #   google-api-core
     #   googleapis-common-protos
     #   mem0ai
-    #   opentelemetry-proto
     #   proto-plus
     #   qdrant-client
-    #   semantic-kernel
     #   streamlit
+psutil==7.2.2
+    # via azure-monitor-opentelemetry-exporter
 pyarrow==22.0.0
     # via streamlit
 pyasn1==0.6.1
@@ -396,49 +510,46 @@ pyasn1==0.6.1
     #   rsa
 pyasn1-modules==0.4.2
     # via google-auth
-pybars4==0.9.13
-    # via semantic-kernel
 pycparser==2.23
     # via cffi
 pydantic==2.11.4
     # via
     #   applications (pyproject.toml)
     #   a2a-sdk
+    #   ag-ui-protocol
     #   agent-framework-core
-    #   autogen-core
+    #   anthropic
     #   fastapi
+    #   github-copilot-sdk
     #   mcp
     #   mem0ai
     #   microsoft-agents-activity
+    #   ollama
     #   openai
+    #   openai-agents
+    #   openai-chatkit
     #   pydantic-settings
     #   qdrant-client
     #   redisvl
-    #   semantic-kernel
 pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via
     #   agent-framework-core
     #   mcp
-    #   semantic-kernel
 pydeck==0.9.1
     # via streamlit
-pyee==13.0.0
-    # via aiortc
 pyjwt==2.10.1
     # via
+    #   azure-ai-evaluation
     #   mcp
     #   microsoft-agents-hosting-core
     #   msal
-pylibsrtp==1.0.0
-    # via aiortc
-pymeta3==0.5.1
-    # via pybars4
-pyopenssl==25.3.0
-    # via aiortc
 python-dateutil==2.9.0.post0
     # via
+    #   agent-framework-durabletask
+    #   azure-functions-durable
+    #   github-copilot-sdk
     #   pandas
     #   posthog
 python-dotenv==1.2.1
@@ -452,6 +563,8 @@ python-multipart==0.0.20
     # via mcp
 python-ulid==3.1.0
     # via redisvl
+pythonnet==3.0.5
+    # via powerfx
 pytz==2025.2
     # via
     #   mem0ai
@@ -462,8 +575,8 @@ pywin32==311
     #   portalocker
 pyyaml==6.0.3
     # via
+    #   agent-framework-declarative
     #   flasgger
-    #   jsonschema-path
     #   redisvl
     #   uvicorn
 qdrant-client==1.15.1
@@ -477,20 +590,23 @@ redisvl==0.11.0
 referencing==0.36.2
     # via
     #   jsonschema
-    #   jsonschema-path
     #   jsonschema-specifications
+regex==2026.1.15
+    # via nltk
 requests==2.32.4
     # via
     #   applications (pyproject.toml)
     #   azure-core
+    #   azure-functions-durable
     #   google-api-core
-    #   jsonschema-path
     #   msal
+    #   msrest
+    #   openai-agents
     #   posthog
-    #   prance
+    #   requests-oauthlib
     #   streamlit
-rfc3339-validator==0.1.4
-    # via openapi-schema-validator
+requests-oauthlib==2.0.0
+    # via msrest
 rpds-py==0.29.0
     # via
     #   jsonschema
@@ -498,23 +614,21 @@ rpds-py==0.29.0
 rsa==4.9.1
     # via google-auth
 ruamel-yaml==0.18.16
-    # via prance
+    # via azure-ai-evaluation
 ruamel-yaml-clib==0.2.15
     # via ruamel-yaml
-scipy==1.16.3
-    # via semantic-kernel
-semantic-kernel==1.35.0
-    # via applications (pyproject.toml)
 six==1.17.0
     # via
     #   flasgger
+    #   furl
+    #   orderedmultidict
     #   posthog
     #   python-dateutil
-    #   rfc3339-validator
 smmap==5.0.2
     # via gitdb
 sniffio==1.3.1
     # via
+    #   anthropic
     #   anyio
     #   openai
 sqlalchemy==2.0.44
@@ -537,35 +651,38 @@ toml==0.10.2
 tornado==6.5.2
     # via streamlit
 tqdm==4.67.1
-    # via openai
+    # via
+    #   nltk
+    #   openai
+types-requests==2.32.4.20260107
+    # via openai-agents
 typing-extensions==4.15.0
     # via
     #   agent-framework-core
     #   aiosignal
     #   altair
+    #   anthropic
     #   anyio
-    #   autogen-core
     #   azure-ai-agents
     #   azure-ai-projects
     #   azure-core
     #   azure-cosmos
     #   azure-identity
+    #   azure-search-documents
     #   azure-storage-blob
     #   fastapi
+    #   github-copilot-sdk
     #   grpcio
     #   mcp
     #   openai
+    #   openai-agents
     #   opentelemetry-api
-    #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
     #   posthog
     #   pydantic
     #   pydantic-core
-    #   pyee
-    #   pyopenssl
     #   referencing
-    #   semantic-kernel
     #   sqlalchemy
     #   streamlit
     #   typing-inspection
@@ -580,11 +697,14 @@ urllib3==2.5.0
     # via
     #   qdrant-client
     #   requests
+    #   types-requests
 uvicorn==0.38.0
     # via
     #   applications (pyproject.toml)
+    #   agent-framework-ag-ui
     #   agent-framework-devui
     #   mcp
+    #   openai-chatkit
 watchdog==6.0.0
     # via streamlit
 watchfiles==1.1.1
@@ -593,12 +713,16 @@ websockets==15.0.1
     # via
     #   applications (pyproject.toml)
     #   mcp
-    #   semantic-kernel
     #   uvicorn
 werkzeug==3.1.3
     # via
+    #   azure-functions
     #   flask
-    #   openapi-core
+wrapt==1.17.3
+    # via
+    #   opentelemetry-instrumentation
+    #   opentelemetry-instrumentation-dbapi
+    #   opentelemetry-instrumentation-urllib3
 yarl==1.22.0
     # via aiohttp
 zipp==3.23.0

@@ -40,8 +40,16 @@ RUN npm install -g serve
 # Copy built assets from builder stage
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 
+# Copy startup script that injects runtime config
+COPY --chown=nodejs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Switch to non-root user
 USER nodejs
+
+# Environment variables for runtime configuration
+ENV API_BASE_URL=""
+ENV WS_URL=""
 
 # Expose port
 EXPOSE 3000
@@ -53,5 +61,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Serve the application
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Run startup script that injects config, then serves the app
+CMD ["/app/docker-entrypoint.sh"]

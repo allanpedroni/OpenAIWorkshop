@@ -450,6 +450,45 @@ async def set_active_agent(req: SetAgentRequest, token: str = Depends(verify_tok
         }
 
 # ──────────────────────────────────────────────────────────────
+# Diagnostic: check observability status
+# ──────────────────────────────────────────────────────────────
+@app.get("/api/diagnostics/observability")
+async def diagnostics_observability():
+    """Check if observability is configured and working."""
+    import importlib
+    diag: Dict[str, Any] = {
+        "observability_enabled": _observability_enabled,
+        "connection_string_set": bool(os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")),
+    }
+    # Check key imports
+    for mod_name in ["azure.monitor.opentelemetry", "agent_framework.observability", "opentelemetry"]:
+        try:
+            importlib.import_module(mod_name)
+            diag[f"import_{mod_name}"] = "ok"
+        except Exception as e:
+            diag[f"import_{mod_name}"] = str(e)
+    # Check OTel tracer provider
+    try:
+        from opentelemetry import trace
+        tp = trace.get_tracer_provider()
+        diag["tracer_provider"] = type(tp).__name__
+        if hasattr(tp, '_active_span_processor'):
+            proc = tp._active_span_processor
+            diag["span_processors"] = type(proc).__name__
+            if hasattr(proc, '_span_processors'):
+                diag["span_processor_list"] = [type(sp).__name__ for sp in proc._span_processors]
+    except Exception as e:
+        diag["tracer_provider_error"] = str(e)
+    # Check OTel meter provider
+    try:
+        from opentelemetry import metrics
+        mp = metrics.get_meter_provider()
+        diag["meter_provider"] = type(mp).__name__
+    except Exception as e:
+        diag["meter_provider_error"] = str(e)
+    return diag
+
+# ──────────────────────────────────────────────────────────────
 # Root route to serve React app
 # ──────────────────────────────────────────────────────────────
 @app.get("/")

@@ -37,8 +37,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY applications/backend.py applications/utils.py ./
 
 # Copy ONLY agent_framework directory (not all agents)
+COPY agents/__init__.py /app/agents/__init__.py
 COPY agents/agent_framework /app/agents/agent_framework
 COPY agents/base_agent.py /app/agents/base_agent.py
+
+# Copy observability module
+COPY observability /app/observability
 
 # Copy built frontend from previous stage (Vite outputs to 'dist')
 COPY --from=frontend-builder /app/frontend/dist ./static

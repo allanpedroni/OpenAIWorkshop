@@ -100,7 +100,7 @@ if (-not $SkipBuild) {
 
 # Step 4: Build and Push Application Image
 if (-not $SkipBuild) {
-    Write-Host "`n[4/5] Building and pushing Application image..." -ForegroundColor Green
+    Write-Host "`n[4/6] Building and pushing Application image..." -ForegroundColor Green
     
     Push-Location agentic_ai/applications
     try {
@@ -118,14 +118,38 @@ if (-not $SkipBuild) {
     
     Write-Host "Application image built and pushed successfully!" -ForegroundColor Green
 } else {
-    Write-Host "`n[4/5] Skipping Application build (--SkipBuild)" -ForegroundColor Yellow
+    Write-Host "`n[4/6] Skipping Application build (--SkipBuild)" -ForegroundColor Yellow
 }
 
-# Step 5: Restart Container Apps to pull new images
-Write-Host "`n[5/5] Restarting Container Apps..." -ForegroundColor Green
+# Step 5: Build and Push Fraud Workflow Image (includes DTS + Worker + Backend)
+if (-not $SkipBuild) {
+    Write-Host "`n[5/6] Building and pushing Fraud Workflow image..." -ForegroundColor Green
+    
+    Push-Location agentic_ai/workflow/fraud_detection_durable
+    try {
+        docker build -t "$AcrLoginServer/fraud-workflow:latest" -f Dockerfile .
+        docker push "$AcrLoginServer/fraud-workflow:latest"
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Fraud Workflow image build/push failed!"
+            exit 1
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    
+    Write-Host "Fraud Workflow image built and pushed successfully!" -ForegroundColor Green
+} else {
+    Write-Host "`n[5/6] Skipping Fraud Workflow build (--SkipBuild)" -ForegroundColor Yellow
+}
+
+# Step 6: Restart Container Apps to pull new images
+Write-Host "`n[6/6] Restarting Container Apps..." -ForegroundColor Green
 
 $McpServiceName = "$BaseName-$Environment-mcp"
 $AppName = "$BaseName-$Environment-app"
+$FraudWorkflowName = "$BaseName-$Environment-fraud-wf"
 
 Write-Host "Restarting MCP Service: $McpServiceName" -ForegroundColor Gray
 az containerapp revision restart `
@@ -139,11 +163,19 @@ az containerapp revision restart `
     --name $AppName `
     --revision latest
 
+Write-Host "Restarting Fraud Workflow: $FraudWorkflowName" -ForegroundColor Gray
+az containerapp revision restart `
+    --resource-group $ResourceGroupName `
+    --name $FraudWorkflowName `
+    --revision latest
+
 Write-Host "`n======================================" -ForegroundColor Cyan
 Write-Host "Deployment Complete!" -ForegroundColor Green
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "`nAccess your application at:" -ForegroundColor Yellow
 Write-Host "  $($outputs.applicationUrl.value)" -ForegroundColor Cyan
+Write-Host "`nFraud Detection Workflow:" -ForegroundColor Yellow
+Write-Host "  $($outputs.fraudWorkflowUrl.value)" -ForegroundColor Cyan
 Write-Host "`nMCP Service URL:" -ForegroundColor Yellow
 Write-Host "  $($outputs.mcpServiceUrl.value)" -ForegroundColor Cyan
 Write-Host "`nResource Group:" -ForegroundColor Yellow

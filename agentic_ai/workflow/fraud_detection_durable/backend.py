@@ -17,12 +17,16 @@ import time
 from datetime import datetime
 from typing import Any
 
+from pathlib import Path
+
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 from durabletask.azuremanaged.client import DurableTaskSchedulerClient
 from durabletask.client import OrchestrationState
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Load environment
@@ -39,14 +43,39 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS
+# CORS - allow localhost for dev and Azure Container Apps for prod
+CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8002",
+]
+# Add Azure Container Apps URL if set
+if os.getenv("CONTAINER_APP_URL"):
+    CORS_ORIGINS.append(os.getenv("CONTAINER_APP_URL"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================================
+# Static Files (React UI)
+# ============================================================================
+
+# Serve static files from React build (production mode)
+# Vite outputs to 'dist/' with assets in 'dist/assets/'
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_ASSET_DIR = STATIC_DIR / "assets"  # Vite structure
+
+if STATIC_ASSET_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_ASSET_DIR)), name="assets")
+    logger.info(f"Serving static assets from {STATIC_ASSET_DIR}")
+elif STATIC_DIR.exists():
+    # Fallback: mount entire static dir
+    logger.info(f"Static assets dir not found, mounting {STATIC_DIR}")
 
 # Constants
 ANALYST_APPROVAL_EVENT = "AnalystDecision"
@@ -301,6 +330,19 @@ def start_status_polling(instance_id: str):
 # ============================================================================
 
 
+@app.get("/")
+async def read_root():
+    """Serve the React frontend index.html."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    return {
+        "message": "Durable Fraud Detection API",
+        "version": "1.0.0",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
@@ -499,9 +541,10 @@ async def shutdown():
 if __name__ == "__main__":
     import uvicorn
     
+    port = int(os.environ.get("BACKEND_PORT", "8002"))
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8001,
+        port=port,
         log_level="info",
     )

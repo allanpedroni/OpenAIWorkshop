@@ -1,9 +1,29 @@
 /**
+ * Runtime configuration support
+ * Priority: window.__CONFIG__ (runtime) > import.meta.env (build-time) > defaults
+ * 
+ * When served from the same origin as the API (production), use relative URLs.
+ * For local dev with separate frontend server, use localhost URLs.
+ */
+const runtimeConfig = typeof window !== 'undefined' ? window.__CONFIG__ || {} : {};
+
+// Determine if we're running from same origin as API (production mode)
+const isSameOrigin = typeof window !== 'undefined' && 
+  !window.location.port.includes('5173') && // Not Vite dev server
+  !window.location.port.includes('3000');   // Not React dev server
+
+// In production (same origin), use relative URLs. In dev, use localhost.
+const defaultBaseUrl = isSameOrigin ? '' : 'http://localhost:8002';
+const defaultWsUrl = isSameOrigin 
+  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+  : 'ws://localhost:8002/ws';
+
+/**
  * API configuration constants
  */
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001',
-  WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws',
+  BASE_URL: runtimeConfig.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || defaultBaseUrl,
+  WS_URL: runtimeConfig.WS_URL || import.meta.env.VITE_WS_URL || defaultWsUrl,
   ENDPOINTS: {
     ALERTS: '/api/alerts',
     WORKFLOW_START: '/api/workflow/start',

@@ -204,6 +204,8 @@ function WorkflowVisualizer({ executorStates = {}, stepDetails = {} }) {
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={{ padding: 0.2 }}
+        style={{ width: '100%', height: '100%' }}
         attributionPosition="bottom-left"
       >
         <Background />

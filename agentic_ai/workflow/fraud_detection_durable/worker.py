@@ -24,7 +24,7 @@ from collections.abc import Generator
 from datetime import timedelta
 from typing import Any
 
-from azure.identity import AzureCliCredential, DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
 from dotenv import load_dotenv
 from durabletask.azuremanaged.worker import DurableTaskSchedulerWorker
 from durabletask.task import ActivityContext, OrchestrationContext, Task, when_any, when_all
@@ -102,8 +102,18 @@ async def _ensure_resources():
         logger.info(f"✓ MCP tool initialized at {mcp_uri}")
     
     if _chat_client is None:
+        # Use managed identity if AZURE_CLIENT_ID is set, otherwise DefaultAzureCredential
+        azure_client_id = os.getenv("AZURE_CLIENT_ID")
+        if azure_client_id:
+            from azure.identity import ManagedIdentityCredential
+            credential = ManagedIdentityCredential(client_id=azure_client_id)
+            logger.info(f"Using ManagedIdentityCredential with client_id: {azure_client_id}")
+        else:
+            credential = DefaultAzureCredential()
+            logger.info("Using DefaultAzureCredential")
+        
         _chat_client = AzureOpenAIChatClient(
-            credential=AzureCliCredential(),
+            credential=credential,
             deployment_name=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4o"),
         )
         logger.info("✓ Azure OpenAI client initialized")
