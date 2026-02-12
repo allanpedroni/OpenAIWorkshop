@@ -1,39 +1,24 @@
 name: Agent Evaluation
 
+# ─────────────────────────────────────────────────────────────────────
+# Runs agent quality evaluation against a deployed backend and logs
+# results to an INDEPENDENT Azure AI Foundry project for trend tracking.
+#
+# Architecture decision: The Foundry project ("evaluate" in RG "ml")
+# is intentionally separate from pipeline-managed infrastructure.
+# Pipeline runs destroy-infrastructure on dev branches, so if Foundry
+# were part of that infra, every run would wipe evaluation history.
+# Keeping it independent enables cross-environment trend comparison
+# and zero provisioning overhead per run.
+#
+# Auth: Uses OIDC (DefaultAzureCredential) — no API keys needed.
+# Required RBAC roles on the GitHub Actions service principal:
+#   - Azure AI User          → on the Foundry hub/project
+#   - Cognitive Services OpenAI User → on the AI Services resource
+#   - Storage Blob Data Contributor  → on the Foundry-linked storage
+# ─────────────────────────────────────────────────────────────────────
+
 on:
-  # Run on PR when agent/evaluation code changes
-  pull_request:
-    paths:
-      - 'agentic_ai/agents/**'
-      - 'agentic_ai/evaluations/**'
-  
-  # Allow manual trigger
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Target environment
-        type: choice
-        options: [dev, integration]
-        default: dev
-      agent_name:
-        description: 'Agent name for evaluation tracking'
-        type: string
-        default: 'ci-agent'
-      limit:
-        description: 'Limit number of test cases (0 = all)'
-        type: number
-        default: 5
-      eval_type:
-        description: 'Evaluation type'
-        type: choice
-        options: [all, single-turn-only, multi-turn-only]
-        default: all
-      push_to_foundry:
-        description: 'Push results to Azure AI Foundry'
-        type: boolean
-        default: false
-  
-  # Callable from other workflows
   workflow_call:
     inputs:
       environment:
@@ -44,147 +29,141 @@ on:
         type: string
         required: true
         description: 'Backend API endpoint URL'
-      mcp_endpoint:
-        type: string
-        required: true
-        description: 'MCP service endpoint URL'
-      agent_name:
-        type: string
-        required: false
-        default: 'ci-agent'
-      limit:
+      eval_limit:
         type: number
         required: false
-        default: 0
-      push_to_foundry:
-        type: boolean
-        required: false
-        default: false
+        default: 5
+        description: 'Max test cases to run (0 = all)'
 
-env:
-  PYTHON_VERSION: '3.12'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, integration, prod]
+        default: dev
+      backend_endpoint:
+        description: 'Backend API endpoint URL'
+        required: true
+      eval_limit:
+        description: 'Max test cases (0 = all, default 5)'
+        required: false
+        default: '5'
 
 jobs:
-  # ============================================================================
-  # Evaluation - Run agent evaluation against test scenarios
-  # ============================================================================
-  evaluate:
-    name: Agent Evaluation
+  agent-evaluation:
+    name: Agent Quality Evaluation
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # For OIDC authentication
-    
-    environment: ${{ inputs.environment || 'dev' }}
-    
+      id-token: write   # Needed for OIDC → DefaultAzureCredential
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-      
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      
-      - name: Install dependencies
-        run: |
-          cd agentic_ai/applications
-          uv sync
-      
-      - name: Azure Login (OIDC)
-        if: ${{ inputs.push_to_foundry == true }}
+          python-version: '3.12'
+
+      - name: Azure OIDC Login
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      
-      - name: Get Azure credentials from Key Vault
-        if: ${{ inputs.push_to_foundry == true }}
+
+      - name: Install evaluation dependencies
         run: |
-          KEYVAULT_NAME="${{ vars.KEYVAULT_NAME }}"
-          
-          if [ -n "$KEYVAULT_NAME" ]; then
-            AOAI_KEY=$(az keyvault secret show --vault-name "$KEYVAULT_NAME" --name "aoai-key" --query value -o tsv 2>/dev/null || echo "")
-            echo "::add-mask::$AOAI_KEY"
-            echo "AZURE_OPENAI_API_KEY=$AOAI_KEY" >> $GITHUB_ENV
-            
-            AI_PROJECT_ENDPOINT=$(az keyvault secret show --vault-name "$KEYVAULT_NAME" --name "ai-project-endpoint" --query value -o tsv 2>/dev/null || echo "")
-            echo "AZURE_AI_PROJECT_ENDPOINT=$AI_PROJECT_ENDPOINT" >> $GITHUB_ENV
-          fi
-      
-      - name: Run Agent Evaluation
+          pip install --upgrade pip
+          # --pre is required so azure-ai-projects>=2.0.0b2 resolves to the
+          # 2.x pre-release (2.0.0b3) instead of the 1.0.0 GA release.
+          # The 2.x SDK is needed for azure_ai_evaluator support.
+          pip install --pre \
+            azure-ai-evaluation>=1.14.0 \
+            azure-ai-projects>=2.0.0b2 \
+            azure-identity>=1.19.0 \
+            httpx>=0.28.0 \
+            requests>=2.32.0 \
+            python-dotenv>=1.0.0 \
+            openai>=2.5.0
+
+      - name: Verify SDK versions
         run: |
-          cd agentic_ai/applications
-          
-          # Build command
-          CMD="uv run python ../evaluations/run_agent_eval.py"
-          CMD="$CMD --agent ${{ inputs.agent_name || 'ci-agent' }}"
-          CMD="$CMD --backend-url ${{ inputs.backend_endpoint || 'http://localhost:7000' }}"
-          
-          # Add limit if specified
-          if [ "${{ inputs.limit }}" != "0" ] && [ -n "${{ inputs.limit }}" ]; then
-            CMD="$CMD --limit ${{ inputs.limit }}"
-          fi
-          
-          # Add eval type filter
-          if [ "${{ inputs.eval_type }}" == "single-turn-only" ]; then
-            CMD="$CMD --single-turn-only"
-          elif [ "${{ inputs.eval_type }}" == "multi-turn-only" ]; then
-            CMD="$CMD --multi-turn-only"
-          fi
-          
-          # Add remote flag if pushing to Foundry
-          if [ "${{ inputs.push_to_foundry }}" == "true" ]; then
-            CMD="$CMD --remote"
-          else
-            CMD="$CMD --local"
-          fi
-          
-          echo "Running: $CMD"
-          $CMD
+          echo "Installed SDK versions:"
+          pip show azure-ai-projects openai azure-ai-evaluation 2>/dev/null | grep -E 'Name:|Version:'
+          echo "---"
+          python -c "from azure.ai.projects import AIProjectClient; print('AIProjectClient imported OK')"
+
+      - name: Wait for backend to be ready
+        run: |
+          echo "Waiting for backend at ${{ inputs.backend_endpoint }}..."
+          for i in $(seq 1 12); do
+            if curl -sf "${{ inputs.backend_endpoint }}/auth/config" > /dev/null 2>&1; then
+              echo "✅ Backend is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/12 — retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Backend not reachable after 2 minutes"
+          exit 1
+
+      - name: Run agent evaluation
+        id: eval
+        run: |
+          cd agentic_ai/evaluations
+          python run_agent_eval.py \
+            --backend-url "${{ inputs.backend_endpoint }}" \
+            --agent "ci_${GITHUB_REF_NAME}" \
+            --local \
+            --remote \
+            --single-turn-only \
+            --limit ${{ inputs.eval_limit }} \
+            --ci \
+            2>&1 | tee eval_output.txt
+
+          echo "eval_completed=true" >> $GITHUB_OUTPUT
+        continue-on-error: true   # Report results but don't fail the pipeline
         env:
-          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_CHAT_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
-          AZURE_OPENAI_API_VERSION: '2025-03-01-preview'
-          MCP_SERVER_URI: ${{ inputs.mcp_endpoint || 'http://localhost:8000/mcp' }}
-      
-      - name: Upload evaluation results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: evaluation-results
-          path: |
-            agentic_ai/evaluations/eval_results/
-            agentic_ai/evaluations/evaluation_input_data.jsonl
-          retention-days: 30
-      
-      - name: Generate Summary
+          # AI Foundry auth — OIDC provides DefaultAzureCredential, no API key needed
+          AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_EVAL_ENDPOINT }}
+          AZURE_OPENAI_EVAL_DEPLOYMENT: ${{ vars.AZURE_OPENAI_EVAL_DEPLOYMENT }}
+          # Note: Do NOT set AZURE_OPENAI_API_VERSION or OPENAI_API_VERSION here.
+          # The azure-ai-projects 2.x SDK sets api-version=2025-11-15-preview
+          # automatically, which is required for azure_ai_evaluator support.
+
+      - name: Generate evaluation summary
         if: always()
         run: |
-          echo "## 📊 Agent Evaluation Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 🧪 Agent Evaluation Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Agent | ${{ inputs.agent_name || 'ci-agent' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | ${{ inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Eval Type | ${{ inputs.eval_type || 'all' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Test Limit | ${{ inputs.limit || 'all' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Push to Foundry | ${{ inputs.push_to_foundry || 'false' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | \`${{ inputs.backend_endpoint }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test limit | ${{ inputs.eval_limit }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${GITHUB_REF_NAME}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Metrics Evaluated" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f agentic_ai/evaluations/eval_output.txt ]; then
+            echo "### Score Summary" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            sed -n '/EVALUATION SUMMARY/,/evaluation complete/p' agentic_ai/evaluations/eval_output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "See workflow logs for details" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Single-Turn (tool-focused):**" >> $GITHUB_STEP_SUMMARY
-          echo "- Tool behavior (recall, precision, efficiency)" >> $GITHUB_STEP_SUMMARY
-          echo "- Completeness, response quality, grounded accuracy" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Multi-Turn (outcome-focused):**" >> $GITHUB_STEP_SUMMARY
-          echo "- Solution accuracy, task adherence, intent resolution" >> $GITHUB_STEP_SUMMARY
-          echo "- Coherence, fluency, relevance" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📁 See artifacts for detailed results" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Full results**: View in [Azure AI Foundry](https://ai.azure.com) → Project \`evaluate\` → Evaluations" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-evaluation-results
+          path: |
+            agentic_ai/evaluations/eval_results/
+            agentic_ai/evaluations/eval_output.txt
+          retention-days: 30
+          if-no-files-found: ignore

@@ -276,7 +276,18 @@ async def run_foundry_evaluation(traces: List[AgentTrace], data_file: Path, agen
         
         with project_client:
             # Get OpenAI client from the project
-            openai_client = project_client.get_openai_client()
+            # Explicitly set api-version to ensure azure_ai_evaluator support
+            # (the SDK default should be 2025-11-15-preview but we force it to be safe)
+            openai_client = project_client.get_openai_client(
+                default_query={"api-version": "2025-11-15-preview"}
+            )
+            
+            # Diagnostic logging for CI debugging
+            import azure.ai.projects
+            print(f"📋 SDK versions: azure-ai-projects={azure.ai.projects.__version__}, openai={__import__('openai').__version__}")
+            print(f"📋 OpenAI base_url: {openai_client.base_url}")
+            if hasattr(openai_client, '_custom_query'):
+                print(f"📋 API version: {openai_client._custom_query}")
             
             # Check if the project has evals capability
             if not hasattr(openai_client, 'evals'):
@@ -598,6 +609,7 @@ async def main():
     parser.add_argument("--limit", type=int, default=0, help="Limit number of test cases to run (0 = all)")
     parser.add_argument("--multi-turn-only", action="store_true", help="Only run multi-turn test cases")
     parser.add_argument("--single-turn-only", action="store_true", help="Only run single-turn test cases")
+    parser.add_argument("--ci", action="store_true", help="CI mode: skip interactive prompts, auto-continue on MCP unavailability")
     args = parser.parse_args()
     
     # Determine agent name based on --agent flag
@@ -632,7 +644,7 @@ async def main():
     try:
         import httpx
         async with httpx.AsyncClient() as client:
-            health_response = await client.get(f"{backend_url}/health", timeout=5.0)
+            health_response = await client.get(f"{backend_url}/auth/config", timeout=5.0)
             print(f"✓ Backend is responding")
     except Exception as e:
         print(f"❌ Cannot connect to backend: {e}")
@@ -650,9 +662,12 @@ async def main():
     except:
         print(f"⚠ WARNING: Could not connect to MCP server")
         print(f"   Make sure it's running: cd mcp && uv run python mcp_service.py")
-        response = input("\nContinue anyway? (y/n): ")
-        if response.lower() != 'y':
-            return
+        if args.ci:
+            print(f"   CI mode: continuing without MCP server")
+        else:
+            response = input("\nContinue anyway? (y/n): ")
+            if response.lower() != 'y':
+                return
     
     # 4. Load test cases
     dataset_path = Path(__file__).parent / "eval_dataset.json"

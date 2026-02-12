@@ -22,9 +22,13 @@ A comprehensive evaluation system for testing AI agents in customer support scen
    - [Local Evaluation](#local-evaluation)
    - [Remote Evaluation (Azure AI Foundry)](#remote-evaluation-azure-ai-foundry)
    - [Comparing Agents](#comparing-agents)
-5. [Interpreting Results](#interpreting-results)
-6. [Extending the Framework](#extending-the-framework)
-7. [Troubleshooting](#troubleshooting)
+5. [CI/CD Integration](#cicd-integration)
+   - [Architecture Decision](#architecture-decision)
+   - [What Runs in CI](#what-runs-in-ci)
+   - [Where Results Appear](#where-results-appear)
+6. [Interpreting Results](#interpreting-results)
+7. [Extending the Framework](#extending-the-framework)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -267,8 +271,8 @@ AZURE_AI_PROJECT_ENDPOINT=https://your-account.services.ai.azure.com/api/project
 
 # Evaluation Model (Optional - defaults to AZURE_OPENAI_CHAT_DEPLOYMENT)
 # Use a separate deployment for evaluation to avoid rate limiting
-# Recommended: gpt-4o or gpt-4o-mini for reliable LLM-as-judge evaluation
-AZURE_OPENAI_EVAL_DEPLOYMENT=gpt-4o-mini
+# Supports GPT-4o, GPT-4o-mini, GPT-5, GPT-5.2, and o-series models
+AZURE_OPENAI_EVAL_DEPLOYMENT=gpt-5.2
 ```
 
 **Where to find the Project Endpoint:**
@@ -278,6 +282,11 @@ AZURE_OPENAI_EVAL_DEPLOYMENT=gpt-4o-mini
 4. Copy the **Project endpoint** URL
 
 > **Note**: The evaluation uses your existing `AZURE_OPENAI_CHAT_DEPLOYMENT` if `AZURE_OPENAI_EVAL_DEPLOYMENT` is not set. Consider using a separate deployment for evaluation to avoid rate limiting during heavy testing.
+
+> **Reasoning Models (GPT-5+, o-series):** The framework automatically detects reasoning models
+> and passes `is_reasoning_model=True` to all Azure AI Evaluation SDK evaluators. This ensures
+> the SDK uses `max_completion_tokens` instead of `max_tokens`, which reasoning models require.
+> No manual configuration is needed — just set your deployment name and the framework handles the rest.
 
 **Assign required Azure roles:**
 ```bash
@@ -331,6 +340,7 @@ uv run python ../evaluations/run_agent_eval.py [OPTIONS]
 | `--single-turn-only` | Run only single-turn test cases |
 | `--multi-turn-only` | Run only multi-turn test cases |
 | `--limit N` | Limit to N test cases (useful for testing) |
+| `--ci` | CI mode: skip interactive prompts, auto-continue on MCP unavailability |
 
 ### Local Evaluation
 
@@ -410,6 +420,78 @@ uv run python ../evaluations/run_agent_eval.py --agent agent_reflection --remote
 ```
 
 View comparison in Azure AI Foundry portal → Evaluations → Compare runs.
+
+---
+
+## CI/CD Integration
+
+Agent evaluation runs automatically in the CI/CD pipeline after integration tests pass. This provides continuous quality monitoring for every deployment.
+
+### Architecture Decision
+
+The evaluation infrastructure uses an **independent Azure AI Foundry project** that is **not** managed by the pipeline's Terraform. This is intentional:
+
+| Concern | Pipeline-managed Foundry | Independent Foundry ✅ |
+|---------|--------------------------|------------------------|
+| `destroy-infrastructure` on dev | **Wipes all eval history** | Eval history preserved |
+| Cross-branch comparison | Results lost per branch | All branches share one project |
+| Setup complexity | Terraform modules needed | One-time manual setup |
+| Lifecycle | Tied to deploy/destroy cycle | Persistent, always available |
+
+The Foundry project (`evaluate`) lives in resource group `ml` and persists regardless of pipeline deploy/destroy cycles. This lets you compare agent quality trends across branches, deployments, and time.
+
+### What Runs in CI
+
+The `agent-evaluation` job runs as part of the **full deploy** pipeline (pushes and manual triggers, not PRs):
+
+```
+pipeline-config → preflight → deploy → build → update → integration-tests → agent-evaluation → destroy
+```
+
+The CI evaluation uses a focused subset for speed:
+
+```bash
+python agentic_ai/evaluations/run_agent_eval.py \
+  --backend-url $BACKEND_ENDPOINT \
+  --agent contoso-agent \
+  --local --remote \
+  --single-turn-only \
+  --limit 5 \
+  --ci
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--single-turn-only` | Skip multi-turn tests (faster, deterministic) |
+| `--limit 5` | Run 5 test cases (configurable via workflow input) |
+| `--ci` | Non-interactive mode: skip `input()` prompts, auto-continue on MCP unavailability |
+| `--local --remote` | Run local metrics AND push results to AI Foundry |
+
+The job uses `continue-on-error: true` so evaluation failures **do not** block the pipeline. This is a quality gate for visibility, not a hard gate.
+
+### Where Results Appear
+
+**GitHub Actions:**
+- **Step Summary** — Scores table rendered directly in the workflow run summary
+- **Artifacts** — Full `eval_results/` directory downloadable from the run
+
+**Azure AI Foundry Portal:**
+- Navigate to [ai.azure.com](https://ai.azure.com) → Project `evaluate` → **Evaluations**
+- Each CI run creates an evaluation named: `contoso-agent - Single Turn | YYYY-MM-DD HH:MM`
+- Use the **Compare** feature to track quality across deployments
+
+### Prerequisites
+
+CI/CD evaluation requires one-time setup:
+
+1. **RBAC roles** on the independent Foundry resources — see [GITHUB_ACTIONS_SETUP.md](../../infra/GITHUB_ACTIONS_SETUP.md#step-3b-assign-ai-foundry-evaluation-roles)
+2. **GitHub Actions variables:**
+   - `AZURE_AI_PROJECT_ENDPOINT` — AI Foundry project endpoint
+   - `AZURE_OPENAI_EVAL_ENDPOINT` — AI Services endpoint for judge models
+   - `AZURE_OPENAI_EVAL_DEPLOYMENT` — Model deployment name (e.g., `gpt-5.2`)
+3. **No API keys needed** — authentication uses OIDC → `DefaultAzureCredential`
+4. **SDK version** — CI uses `azure-ai-projects>=2.0.0b2` (pre-release) for `azure_ai_evaluator` support.
+   The `--pre` flag is required for pip to resolve pre-release versions.
 
 ---
 
@@ -555,10 +637,10 @@ AZURE_OPENAI_EVAL_DEPLOYMENT=gpt-4o-mini-eval
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AZURE_AI_PROJECT_ENDPOINT` | For `--remote` | Azure AI Foundry project endpoint URL |
-| `AZURE_OPENAI_EVAL_DEPLOYMENT` | No | Model deployment for LLM-as-judge (defaults to `AZURE_OPENAI_CHAT_DEPLOYMENT`) |
+| `AZURE_OPENAI_EVAL_DEPLOYMENT` | No | Model deployment for LLM-as-judge (defaults to `AZURE_OPENAI_CHAT_DEPLOYMENT`). Supports GPT-5+/o-series with auto reasoning model detection. |
 | `AZURE_OPENAI_CHAT_DEPLOYMENT` | Yes | Default model deployment (used if eval deployment not set) |
 | `AZURE_OPENAI_ENDPOINT` | Yes | Azure OpenAI resource endpoint |
-| `AZURE_OPENAI_API_KEY` | Yes* | Azure OpenAI API key (*or use managed identity) |
+| `AZURE_OPENAI_API_KEY` | No* | Azure OpenAI API key (*not needed when using OIDC/managed identity in CI) |
 
 ---
 

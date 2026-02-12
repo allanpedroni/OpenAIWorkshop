@@ -24,6 +24,8 @@ The CI/CD pipeline uses:
 │    │     ├── docker-application.yml (build backend image)           │
 │    │     ├── docker-mcp.yml (build MCP service image)               │
 │    │     ├── update-containers.yml (refresh running apps)           │
+│    │     ├── integration-tests.yml (smoke tests)                    │
+│    │     ├── agent-evaluation.yml (AI quality evaluation)           │
 │    │     └── destroy.yml (optional cleanup, dev only)               │
 │    │                                                                 │
 │    ├── [Tests Only – pull requests]                                  │
@@ -41,7 +43,8 @@ The CI/CD pipeline uses:
 │  │     └── Federated Credentials (main, int-agentic, PRs)           │
 │  ├── Storage Account (Terraform state)                              │
 │  ├── Container Registry (Docker images)                             │
-│  └── Container Apps (MCP + Backend)                                 │
+│  ├── Container Apps (MCP + Backend)                                 │
+│  └── AI Foundry Project (evaluation results, independent lifecycle) │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -154,6 +157,43 @@ az role assignment create `
     --scope "/subscriptions/$SubscriptionId"
 ```
 
+### Step 3b: Assign AI Foundry Evaluation Roles
+
+The agent evaluation pipeline uses an **independent** Azure AI Foundry project (not managed by Terraform).
+This avoids `destroy-infrastructure` wiping evaluation history on dev branches.
+
+Assign these roles to the service principal on the pre-existing Foundry resources:
+
+```powershell
+$AppId = "YOUR_APP_ID"
+$SubscriptionId = "YOUR_SUBSCRIPTION_ID"
+$FoundryRG = "ml"                         # Resource group containing the Foundry hub
+$HubName = "eastus2"                       # AI Foundry hub workspace name
+$AIServicesName = "eastus2oai"              # AI Services account connected to the Foundry project
+$StorageName = "steastus2508770413322"      # Foundry's backing storage account
+
+# Azure AI User – read/write access to the Foundry hub and project
+az role assignment create `
+    --assignee $AppId `
+    --role "Azure AI User" `
+    --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryRG/providers/Microsoft.MachineLearningServices/workspaces/$HubName"
+
+# Cognitive Services OpenAI Contributor – invoke judge models AND push eval results via /openai/evals API
+az role assignment create `
+    --assignee $AppId `
+    --role "Cognitive Services OpenAI Contributor" `
+    --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryRG/providers/Microsoft.CognitiveServices/accounts/$AIServicesName"
+
+# Storage Blob Data Contributor – upload evaluation data to Foundry storage
+az role assignment create `
+    --assignee $AppId `
+    --role "Storage Blob Data Contributor" `
+    --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryRG/providers/Microsoft.Storage/storageAccounts/$StorageName"
+```
+
+> **Note:** These roles are on the **independent** Foundry resources (RG `ml`), not the
+> pipeline-deployed infrastructure. The Foundry project persists across deploy/destroy cycles.
+
 ## Step 4: Create Terraform State Storage
 
 ```powershell
@@ -202,6 +242,9 @@ Go to **GitHub → Repository → Settings → Secrets and Variables → Actions
 | `PROJECT_NAME` | Project identifier | `OpenAIWorkshop` |
 | `ITERATION` | Deployment iteration | `002` |
 | `AZ_REGION` | Azure region | `eastus2` |
+| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint for evaluation | `https://eastus2oai.services.ai.azure.com/api/projects/eastus2` |
+| `AZURE_OPENAI_EVAL_ENDPOINT` | AI Services endpoint for judge models | `https://eastus2oai.services.ai.azure.com/` |
+| `AZURE_OPENAI_EVAL_DEPLOYMENT` | Model deployment for LLM-as-judge | `gpt-5.2` |
 
 ### Optional Environment-Specific Variables
 
@@ -222,9 +265,9 @@ The orchestrator has two modes determined by the trigger:
 |---------|------|-----------|-------------|
 | **PR → `main`** | Tests only | `resolve-endpoints` → `integration-tests` | `prod` |
 | **PR → `int-agentic`** | Tests only | `resolve-endpoints` → `integration-tests` | `integration` |
-| **Push to `main`** (after merge) | Full deploy | Preflight → Infra → Build → Update → Tests | `prod` |
-| **Push to `tjs-infra-as-code`** | Full deploy | Preflight → Infra → Build → Update → Tests → Destroy | `dev` |
-| **Manual dispatch** | Full deploy | Preflight → Infra → Build → Update → Tests | Chosen env |
+| **Push to `main`** (after merge) | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | `prod` |
+| **Push to `tjs-infra-as-code`** | Full deploy | Preflight → Infra → Build → Update → Tests → Eval → Destroy | `dev` |
+| **Manual dispatch** | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | Chosen env |
 
 ### Tests-Only Mode (PRs)
 
@@ -251,6 +294,7 @@ environment.
 | `docker-mcp.yml` | Called by orchestrate (full deploy) | Build MCP container |
 | `update-containers.yml` | Called by orchestrate (full deploy) | Refresh Container Apps |
 | `destroy.yml` | Called by orchestrate (dev only) | Terraform destroy |
+| `agent-evaluation.yml` | Called by orchestrate (full deploy) | AI quality evaluation via Azure AI Foundry |
 | `integration-tests.yml` | Called by orchestrate (both modes) | Run pytest integration tests |
 
 ## Branch to Environment Mapping
@@ -346,6 +390,7 @@ $env:TFSTATE_KEY = "local-dev.tfstate"
 ├── docker-application.yml   # Backend container build
 ├── docker-mcp.yml          # MCP container build
 ├── update-containers.yml    # Container App refresh
+├── agent-evaluation.yml     # AI quality evaluation
 ├── destroy.yml             # Infrastructure teardown
 └── readme.md               # Workflow documentation
 

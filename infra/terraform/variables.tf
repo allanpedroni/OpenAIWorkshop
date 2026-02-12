@@ -49,7 +49,7 @@ variable "openai_api_version" {
 variable "openai_deployment_capacity" {
   description = "Capacity (TPM in thousands) for OpenAI deployment"
   type        = number
-  default     = 50
+  default     = 200
 }
 
 variable "iteration" {

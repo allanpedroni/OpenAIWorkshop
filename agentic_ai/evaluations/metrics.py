@@ -10,6 +10,7 @@ Includes Azure AI Foundry evaluators for LLM-as-judge evaluation.
 """
 
 import os
+import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -658,29 +659,60 @@ class AzureAIEvaluatorSuite:
             eval_deployment = os.getenv("AZURE_OPENAI_EVAL_DEPLOYMENT") or os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4o-mini")
             model_config = {
                 "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
-                "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
                 "azure_deployment": eval_deployment,
                 "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
             }
+            # Only include api_key if explicitly set; otherwise SDK uses DefaultAzureCredential
+            api_key = os.getenv("AZURE_OPENAI_API_KEY")
+            if api_key:
+                model_config["api_key"] = api_key
         
         if not model_config.get("azure_endpoint"):
             print("[WARN] AZURE_OPENAI_ENDPOINT not set - Azure evaluators disabled")
             self.available = False
             return
         
+        # Detect reasoning models (GPT-5+, o-series) which require
+        # max_completion_tokens instead of max_tokens.
+        deployment = model_config.get("azure_deployment", "")
+        self._is_reasoning_model = self._check_reasoning_model(deployment)
+        if self._is_reasoning_model:
+            print(f"[OK] Reasoning model detected ({deployment}) — passing is_reasoning_model=True to evaluators")
+        
+        # Build common kwargs — SDK evaluators natively support is_reasoning_model flag
+        eval_kwargs = {"model_config": model_config}
+        if self._is_reasoning_model:
+            eval_kwargs["is_reasoning_model"] = True
+        
         try:
             # Initialize all evaluators
-            self._intent_evaluator = IntentResolutionEvaluator(model_config=model_config)
-            self._coherence_evaluator = CoherenceEvaluator(model_config=model_config)
-            self._fluency_evaluator = FluencyEvaluator(model_config=model_config)
-            self._relevance_evaluator = RelevanceEvaluator(model_config=model_config)
-            self._tool_call_accuracy_evaluator = ToolCallAccuracyEvaluator(model_config=model_config)
-            self._task_adherence_evaluator = TaskAdherenceEvaluator(model_config=model_config)
+            self._intent_evaluator = IntentResolutionEvaluator(**eval_kwargs)
+            self._coherence_evaluator = CoherenceEvaluator(**eval_kwargs)
+            self._fluency_evaluator = FluencyEvaluator(**eval_kwargs)
+            self._relevance_evaluator = RelevanceEvaluator(**eval_kwargs)
+            self._tool_call_accuracy_evaluator = ToolCallAccuracyEvaluator(**eval_kwargs)
+            self._task_adherence_evaluator = TaskAdherenceEvaluator(**eval_kwargs)
             self._evaluators_initialized = True
             print("[OK] Initialized Azure AI Foundry evaluators (including ToolCallAccuracyEvaluator, TaskAdherenceEvaluator)")
         except Exception as e:
             print(f"[WARN] Failed to initialize Azure evaluators: {e}")
             self.available = False
+
+    @staticmethod
+    def _check_reasoning_model(model_name: str) -> bool:
+        """Check if a model is a reasoning model (GPT-5+, o-series).
+        
+        Reasoning models require max_completion_tokens instead of max_tokens.
+        """
+        model_lower = model_name.lower()
+        # o-series reasoning models (o1, o3, o4, etc.)
+        if re.match(r'^o\d', model_lower):
+            return True
+        # GPT-5 or higher
+        gpt_match = re.search(r'gpt-?(\d+)', model_lower)
+        if gpt_match and int(gpt_match.group(1)) >= 5:
+            return True
+        return False
 
     def evaluate_intent(self, query: str, response: str) -> EvaluationResult:
         """Evaluate if agent correctly identified user intent."""

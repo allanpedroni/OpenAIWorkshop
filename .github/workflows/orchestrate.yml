@@ -233,14 +233,33 @@ jobs:
     secrets: inherit
 
   # ────────────────────────────────────────────────────────────────────
-  # Optional: Destroy infrastructure (dev branches only, after tests pass)
+  # Step 6: Agent quality evaluation (full deploy only)
+  #   Runs a subset of agent eval test cases against the deployed backend
+  #   and logs results to an independent AI Foundry project for trending.
   # ────────────────────────────────────────────────────────────────────
-  destroy-infrastructure:
-    needs: [pipeline-config, integration-tests]
+  agent-evaluation:
+    needs: [pipeline-config, deploy-infrastructure, update-containers, integration-tests]
     if: >-
       always()
       && needs.pipeline-config.outputs.full_deploy == 'true'
       && needs.integration-tests.result == 'success'
+    uses: ./.github/workflows/agent-evaluation.yml
+    with:
+      environment: ${{ needs.pipeline-config.outputs.environment }}
+      backend_endpoint: ${{ needs.deploy-infrastructure.outputs.backend_endpoint }}
+      eval_limit: 5
+    secrets: inherit
+
+  # ────────────────────────────────────────────────────────────────────
+  # Optional: Destroy infrastructure (dev branches only, after tests pass)
+  # ────────────────────────────────────────────────────────────────────
+  destroy-infrastructure:
+    needs: [pipeline-config, integration-tests, agent-evaluation]
+    if: >-
+      always()
+      && needs.pipeline-config.outputs.full_deploy == 'true'
+      && needs.integration-tests.result == 'success'
+      && (needs.agent-evaluation.result == 'success' || needs.agent-evaluation.result == 'skipped' || needs.agent-evaluation.result == 'failure')
       && (github.ref_name == 'tjs-infra-as-code' || github.ref_name == 'james-dev' || (inputs.target_env && inputs.target_env == 'dev'))
     uses: ./.github/workflows/destroy.yml
     with:
