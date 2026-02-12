@@ -674,21 +674,24 @@ class AzureAIEvaluatorSuite:
         
         # Detect reasoning models (GPT-5+, o-series) which require
         # max_completion_tokens instead of max_tokens.
-        # The Azure AI Evaluation SDK internally uses max_tokens in its prompty
-        # templates, so we monkey-patch the OpenAI client to convert automatically.
         deployment = model_config.get("azure_deployment", "")
         self._is_reasoning_model = self._check_reasoning_model(deployment)
         if self._is_reasoning_model:
-            self._patch_openai_for_reasoning_model()
+            print(f"[OK] Reasoning model detected ({deployment}) — passing is_reasoning_model=True to evaluators")
+        
+        # Build common kwargs — SDK evaluators natively support is_reasoning_model flag
+        eval_kwargs = {"model_config": model_config}
+        if self._is_reasoning_model:
+            eval_kwargs["is_reasoning_model"] = True
         
         try:
             # Initialize all evaluators
-            self._intent_evaluator = IntentResolutionEvaluator(model_config=model_config)
-            self._coherence_evaluator = CoherenceEvaluator(model_config=model_config)
-            self._fluency_evaluator = FluencyEvaluator(model_config=model_config)
-            self._relevance_evaluator = RelevanceEvaluator(model_config=model_config)
-            self._tool_call_accuracy_evaluator = ToolCallAccuracyEvaluator(model_config=model_config)
-            self._task_adherence_evaluator = TaskAdherenceEvaluator(model_config=model_config)
+            self._intent_evaluator = IntentResolutionEvaluator(**eval_kwargs)
+            self._coherence_evaluator = CoherenceEvaluator(**eval_kwargs)
+            self._fluency_evaluator = FluencyEvaluator(**eval_kwargs)
+            self._relevance_evaluator = RelevanceEvaluator(**eval_kwargs)
+            self._tool_call_accuracy_evaluator = ToolCallAccuracyEvaluator(**eval_kwargs)
+            self._task_adherence_evaluator = TaskAdherenceEvaluator(**eval_kwargs)
             self._evaluators_initialized = True
             print("[OK] Initialized Azure AI Foundry evaluators (including ToolCallAccuracyEvaluator, TaskAdherenceEvaluator)")
         except Exception as e:
@@ -710,42 +713,6 @@ class AzureAIEvaluatorSuite:
         if gpt_match and int(gpt_match.group(1)) >= 5:
             return True
         return False
-
-    @staticmethod
-    def _patch_openai_for_reasoning_model():
-        """Monkey-patch OpenAI client to use max_completion_tokens instead of max_tokens.
-        
-        The Azure AI Evaluation SDK's built-in evaluators (CoherenceEvaluator, etc.)
-        internally call chat.completions.create(max_tokens=...) via their prompty
-        templates. Reasoning models (GPT-5+, o-series) reject max_tokens and require
-        max_completion_tokens. This patch transparently converts the parameter.
-        """
-        try:
-            import openai.resources.chat.completions as _chat_mod
-
-            # Patch async path (used by SDK evaluators)
-            _orig_async = _chat_mod.AsyncCompletions.create
-
-            async def _patched_async(self, *args, **kwargs):
-                if 'max_tokens' in kwargs:
-                    kwargs['max_completion_tokens'] = kwargs.pop('max_tokens')
-                return await _orig_async(self, *args, **kwargs)
-
-            _chat_mod.AsyncCompletions.create = _patched_async
-
-            # Patch sync path (fallback)
-            _orig_sync = _chat_mod.Completions.create
-
-            def _patched_sync(self, *args, **kwargs):
-                if 'max_tokens' in kwargs:
-                    kwargs['max_completion_tokens'] = kwargs.pop('max_tokens')
-                return _orig_sync(self, *args, **kwargs)
-
-            _chat_mod.Completions.create = _patched_sync
-
-            print(f"[OK] Patched OpenAI client: max_tokens → max_completion_tokens (reasoning model detected)")
-        except Exception as e:
-            print(f"[WARN] Failed to patch OpenAI client for reasoning model: {e}")
 
     def evaluate_intent(self, query: str, response: str) -> EvaluationResult:
         """Evaluate if agent correctly identified user intent."""
