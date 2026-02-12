@@ -169,7 +169,7 @@ $AppId = "YOUR_APP_ID"
 $SubscriptionId = "YOUR_SUBSCRIPTION_ID"
 $FoundryRG = "ml"                         # Resource group containing the Foundry hub
 $HubName = "eastus2"                       # AI Foundry hub workspace name
-$AIServicesName = "ai-eastus2508770413322"  # Connected AI Services account
+$AIServicesName = "eastus2oai"              # AI Services account connected to the Foundry project
 $StorageName = "steastus2508770413322"      # Foundry's backing storage account
 
 # Azure AI User – read/write access to the Foundry hub and project
@@ -242,9 +242,9 @@ Go to **GitHub → Repository → Settings → Secrets and Variables → Actions
 | `PROJECT_NAME` | Project identifier | `OpenAIWorkshop` |
 | `ITERATION` | Deployment iteration | `002` |
 | `AZ_REGION` | Azure region | `eastus2` |
-| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint for evaluation | `https://ai-eastus2508770413322.services.ai.azure.com/api/projects/evaluate` |
-| `AZURE_OPENAI_EVAL_ENDPOINT` | AI Services endpoint for judge models | `https://ai-eastus2508770413322.services.ai.azure.com/` |
-| `AZURE_OPENAI_EVAL_DEPLOYMENT` | Model deployment for LLM-as-judge | `gpt-4o` |
+| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint for evaluation | `https://eastus2oai.services.ai.azure.com/api/projects/eastus2` |
+| `AZURE_OPENAI_EVAL_ENDPOINT` | AI Services endpoint for judge models | `https://eastus2oai.services.ai.azure.com/` |
+| `AZURE_OPENAI_EVAL_DEPLOYMENT` | Model deployment for LLM-as-judge | `gpt-5.2` |
 
 ### Optional Environment-Specific Variables
 
