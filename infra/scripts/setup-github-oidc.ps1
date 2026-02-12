@@ -16,6 +16,16 @@ param(
     
     [Parameter(Mandatory=$false)]
     [switch]$IncludePullRequests = $true,
+
+    # If your GitHub org/repo uses a customized OIDC subject claim template with
+    # numeric IDs (repository_owner_id / repository_id), set these values.
+    # You can find them via the GitHub API: GET /repos/{owner}/{repo}
+    # ("owner.id" = OwnerID, "id" = RepoID).
+    [Parameter(Mandatory=$false)]
+    [string]$GitHubOwnerID,
+
+    [Parameter(Mandatory=$false)]
+    [string]$GitHubRepoID,
     
     [Parameter(Mandatory=$false)]
     [switch]$SetupTerraformState = $true,
@@ -85,10 +95,26 @@ Write-Host "[3/5] Creating Federated Credentials..." -ForegroundColor Green
 
 $AppObjectId = az ad app show --id $AppId --query id -o tsv
 
+# Determine subject format based on whether numeric IDs are provided.
+# GitHub orgs/repos with a customized OIDC subject claim template use:
+#   repository_owner_id:<owner_id>:repository_id:<repo_id>:ref:refs/heads/<branch>
+# The default (non-customized) format is:
+#   repo:<org>/<repo>:ref:refs/heads/<branch>
+$useNumericSubject = ($GitHubOwnerID -and $GitHubRepoID)
+if ($useNumericSubject) {
+    Write-Host "Using numeric subject claim format (repository_owner_id / repository_id)" -ForegroundColor Cyan
+} else {
+    Write-Host "Using default subject claim format (repo:org/repo)" -ForegroundColor Cyan
+}
+
 # Create credential for each branch
 foreach ($branch in $Branches) {
     $credName = "github-$($branch -replace '/', '-')"
-    $subject = "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/$branch"
+    if ($useNumericSubject) {
+        $subject = "repository_owner_id:${GitHubOwnerID}:repository_id:${GitHubRepoID}:ref:refs/heads/$branch"
+    } else {
+        $subject = "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/$branch"
+    }
     
     $existing = az ad app federated-credential list --id $AppObjectId --query "[?name=='$credName'].name" -o tsv 2>$null
     
@@ -110,7 +136,11 @@ foreach ($branch in $Branches) {
 # Create credential for pull requests
 if ($IncludePullRequests) {
     $prCredName = "github-pullrequests"
-    $prSubject = "repo:${GitHubOrg}/${GitHubRepo}:pull_request"
+    if ($useNumericSubject) {
+        $prSubject = "repository_owner_id:${GitHubOwnerID}:repository_id:${GitHubRepoID}:pull_request"
+    } else {
+        $prSubject = "repo:${GitHubOrg}/${GitHubRepo}:pull_request"
+    }
     
     $existing = az ad app federated-credential list --id $AppObjectId --query "[?name=='$prCredName'].name" -o tsv 2>$null
     

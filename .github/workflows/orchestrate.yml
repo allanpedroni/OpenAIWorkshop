@@ -1,4 +1,12 @@
-name: Orchestrate Full Deployment
+name: Orchestrate Deployment
+
+# ─────────────────────────────────────────────────────────────────────
+# Pipeline modes:
+#   PR → main / int-agentic  ➜  tests-only  (validate against existing env)
+#   Push → main              ➜  full deploy  (deploy to prod after merge)
+#   Push → tjs-infra-as-code ➜  full deploy  (dev, with auto-destroy)
+#   Manual dispatch          ➜  full deploy  (chosen environment)
+# ─────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
@@ -16,6 +24,7 @@ on:
 
   push:
     branches:
+      - main
       - tjs-infra-as-code
 
 permissions:
@@ -24,9 +33,63 @@ permissions:
 
 
 jobs:
-  preflight:
+  # ────────────────────────────────────────────────────────────────────
+  # Step 0: Determine pipeline mode and target environment
+  # ────────────────────────────────────────────────────────────────────
+  pipeline-config:
     runs-on: ubuntu-latest
-    # environment: removed to use repo-level variables
+    outputs:
+      environment: ${{ steps.config.outputs.environment }}
+      full_deploy: ${{ steps.config.outputs.full_deploy }}
+    steps:
+      - name: Determine pipeline mode
+        id: config
+        run: |
+          EVENT="${{ github.event_name }}"
+
+          # ── Resolve target environment ──
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.target_env }}"
+          elif [ "$EVENT" = "pull_request" ]; then
+            case "${{ github.base_ref }}" in
+              main)         ENV="prod" ;;
+              int-agentic)  ENV="integration" ;;
+              *)            ENV="dev" ;;
+            esac
+          elif [ "$EVENT" = "push" ]; then
+            case "${{ github.ref_name }}" in
+              main)               ENV="prod" ;;
+              tjs-infra-as-code)  ENV="dev" ;;
+              *)                  ENV="dev" ;;
+            esac
+          else
+            ENV="dev"
+          fi
+
+          # ── Resolve pipeline mode ──
+          # PRs only run integration tests against the existing environment.
+          # Pushes and manual dispatches do a full deploy + build + test.
+          if [ "$EVENT" = "pull_request" ]; then
+            FULL_DEPLOY="false"
+          else
+            FULL_DEPLOY="true"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "full_deploy=$FULL_DEPLOY" >> $GITHUB_OUTPUT
+          echo "──────────────────────────────────────"
+          echo "Event:       $EVENT"
+          echo "Environment: $ENV"
+          echo "Full deploy: $FULL_DEPLOY"
+          echo "──────────────────────────────────────"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Step 1: Preflight – unlock Terraform state storage (full deploy only)
+  # ────────────────────────────────────────────────────────────────────
+  preflight:
+    needs: pipeline-config
+    if: needs.pipeline-config.outputs.full_deploy == 'true'
+    runs-on: ubuntu-latest
     steps:
       - name: Azure OIDC Login
         uses: azure/login@v2
@@ -36,133 +99,141 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - run: |
-          echo "Full orchestrated run through. Should add unit testing and validation here later."
-          echo "MCAPS sub disables storage account networking, run a command to ensure the account is reachable."
+          echo "Full deploy – ensuring TF state storage is reachable."
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --default-action Allow
           az storage account update --resource-group ${{ vars.TFSTATE_RG }} --name ${{ vars.TFSTATE_ACCOUNT }} --public-network-access Enabled
-          
 
-  # Step 1: Deploy infrastructure FIRST (creates ACR, Container Apps, etc.)
+  # ────────────────────────────────────────────────────────────────────
+  # Step 2: Deploy infrastructure (full deploy only)
+  # ────────────────────────────────────────────────────────────────────
   deploy-infrastructure:
-    needs: preflight
+    needs: [pipeline-config, preflight]
+    if: needs.pipeline-config.outputs.full_deploy == 'true'
     uses: ./.github/workflows/infrastructure.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
     secrets: inherit
 
-  # Step 2: Build containers AFTER infrastructure exists (ACR is now available)
+  # ────────────────────────────────────────────────────────────────────
+  # Step 3: Build containers (full deploy only)
+  # ────────────────────────────────────────────────────────────────────
   build-application-container:
-    needs: deploy-infrastructure
+    needs: [pipeline-config, deploy-infrastructure]
+    if: needs.pipeline-config.outputs.full_deploy == 'true'
     uses: ./.github/workflows/docker-application.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
     secrets: inherit
 
   build-mcp-container:
-    needs: deploy-infrastructure
+    needs: [pipeline-config, deploy-infrastructure]
+    if: needs.pipeline-config.outputs.full_deploy == 'true'
     uses: ./.github/workflows/docker-mcp.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
     secrets: inherit
 
-  # Step 3: Update Container Apps with new images after builds complete
+  # ────────────────────────────────────────────────────────────────────
+  # Step 4: Update Container Apps with new images (full deploy only)
+  # ────────────────────────────────────────────────────────────────────
   update-containers:
-    needs: [ build-application-container, build-mcp-container ]
-    if: always() && (needs.build-application-container.result == 'success' || needs.build-mcp-container.result == 'success')
+    needs: [pipeline-config, build-application-container, build-mcp-container]
+    if: >-
+      always()
+      && needs.pipeline-config.outputs.full_deploy == 'true'
+      && (needs.build-application-container.result == 'success' || needs.build-mcp-container.result == 'success')
     uses: ./.github/workflows/update-containers.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
     secrets: inherit
 
-  # Step 4: Run integration tests AFTER containers are deployed and running
+  # ────────────────────────────────────────────────────────────────────
+  # Resolve endpoints from existing environment (PR / tests-only path)
+  # Looks up Container App FQDNs via az cli instead of deploying infra.
+  # ────────────────────────────────────────────────────────────────────
+  resolve-endpoints:
+    needs: pipeline-config
+    if: needs.pipeline-config.outputs.full_deploy == 'false'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_endpoint: ${{ steps.lookup.outputs.backend_endpoint }}
+      mcp_endpoint: ${{ steps.lookup.outputs.mcp_endpoint }}
+    steps:
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Look up Container App endpoints
+        id: lookup
+        run: |
+          PROJECT="${{ vars.PROJECT_NAME || 'OpenAIWorkshop' }}"
+          ENV="${{ needs.pipeline-config.outputs.environment }}"
+          ITERATION="${{ vars.ITERATION || '002' }}"
+          RG="rg-${PROJECT}-${ENV}-${ITERATION}"
+
+          echo "Looking up endpoints in resource group: $RG"
+
+          BE_FQDN=$(az containerapp show \
+            --name "ca-be-${ITERATION}" \
+            --resource-group "$RG" \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+
+          MCP_FQDN=$(az containerapp show \
+            --name "ca-mcp-${ITERATION}" \
+            --resource-group "$RG" \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+
+          if [ -n "$BE_FQDN" ]; then
+            echo "backend_endpoint=https://${BE_FQDN}" >> $GITHUB_OUTPUT
+            echo "✅ Backend: https://${BE_FQDN}"
+          else
+            echo "::error::Backend Container App not found in $RG – is the environment deployed?"
+            echo "backend_endpoint=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          if [ -n "$MCP_FQDN" ]; then
+            echo "mcp_endpoint=https://${MCP_FQDN}" >> $GITHUB_OUTPUT
+            echo "✅ MCP: https://${MCP_FQDN}"
+          else
+            echo "::warning::MCP Container App not found in $RG – MCP tests will be skipped"
+            echo "mcp_endpoint=" >> $GITHUB_OUTPUT
+          fi
+
+  # ────────────────────────────────────────────────────────────────────
+  # Step 5: Run integration tests
+  #   Full deploy path  → endpoints come from Terraform outputs
+  #   Tests-only path   → endpoints come from resolve-endpoints
+  # ────────────────────────────────────────────────────────────────────
   integration-tests:
-    needs: [ deploy-infrastructure, update-containers ]
-    if: always() && needs.update-containers.result == 'success'
+    needs: [pipeline-config, deploy-infrastructure, update-containers, resolve-endpoints]
+    if: >-
+      always() && (
+        needs.update-containers.result == 'success'
+        || needs.resolve-endpoints.result == 'success'
+      )
     uses: ./.github/workflows/integration-tests.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
-      backend_endpoint: ${{ needs.deploy-infrastructure.outputs.backend_endpoint }}
-      mcp_endpoint: ${{ needs.deploy-infrastructure.outputs.mcp_endpoint }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
+      backend_endpoint: ${{ needs.deploy-infrastructure.outputs.backend_endpoint || needs.resolve-endpoints.outputs.backend_endpoint }}
+      mcp_endpoint: ${{ needs.deploy-infrastructure.outputs.mcp_endpoint || needs.resolve-endpoints.outputs.mcp_endpoint }}
       mcp_internal_only: true
     secrets: inherit
 
-  # Optional: Destroy infrastructure (only for test branches)
+  # ────────────────────────────────────────────────────────────────────
+  # Optional: Destroy infrastructure (dev branches only, after tests pass)
+  # ────────────────────────────────────────────────────────────────────
   destroy-infrastructure:
-    needs: [ integration-tests ]
-    if: always() && (github.ref_name == 'tjs-infra-as-code' || github.ref_name == 'james-dev' || (inputs.target_env && inputs.target_env == 'dev')) && needs.integration-tests.result == 'success'
+    needs: [pipeline-config, integration-tests]
+    if: >-
+      always()
+      && needs.pipeline-config.outputs.full_deploy == 'true'
+      && needs.integration-tests.result == 'success'
+      && (github.ref_name == 'tjs-infra-as-code' || github.ref_name == 'james-dev' || (inputs.target_env && inputs.target_env == 'dev'))
     uses: ./.github/workflows/destroy.yml
     with:
-      environment: >-
-        ${{
-          inputs.target_env
-          || (github.event_name == 'pull_request' && (
-               github.base_ref == 'tjs-infra-as-code' && 'dev'
-            || github.base_ref == 'int-agentic'        && 'integration'
-            || github.base_ref == 'main'               && 'prod'
-          ))
-          || (github.ref_name == 'tjs-infra-as-code' && 'dev')
-          || (github.ref_name == 'int-agentic'        && 'integration')
-          || (github.ref_name == 'main'               && 'prod')
-          || 'dev'
-        }}
+      environment: ${{ needs.pipeline-config.outputs.environment }}
     secrets: inherit

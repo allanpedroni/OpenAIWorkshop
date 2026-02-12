@@ -16,12 +16,20 @@ The CI/CD pipeline uses:
 │                         GitHub Actions                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │  orchestrate.yml                                                     │
-│    ├── preflight (enable storage access)                            │
-│    ├── docker-application.yml (build backend image)                 │
-│    ├── docker-mcp.yml (build MCP service image)                     │
-│    ├── infrastructure.yml (Terraform deploy)                        │
-│    ├── update-containers.yml (refresh running apps)                 │
-│    └── destroy.yml (optional cleanup)                               │
+│    ├── pipeline-config (determine mode + environment)               │
+│    │                                                                 │
+│    ├── [Full Deploy – push/manual]                                   │
+│    │     ├── preflight (enable storage access)                      │
+│    │     ├── infrastructure.yml (Terraform deploy)                  │
+│    │     ├── docker-application.yml (build backend image)           │
+│    │     ├── docker-mcp.yml (build MCP service image)               │
+│    │     ├── update-containers.yml (refresh running apps)           │
+│    │     └── destroy.yml (optional cleanup, dev only)               │
+│    │                                                                 │
+│    ├── [Tests Only – pull requests]                                  │
+│    │     └── resolve-endpoints (az containerapp show)               │
+│    │                                                                 │
+│    └── integration-tests.yml (runs in both modes)                   │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               │ OIDC (no secrets)
@@ -79,11 +87,17 @@ Write-Host "Subscription ID: $SubscriptionId"
 
 ## Step 2: Configure Federated Credentials
 
-Create federated credentials for each branch/environment:
+Create federated credentials for each branch/environment.
+
+> **Important:** GitHub org/repos that have a [customized OIDC subject claim template](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect#customizing-the-subject-claims-for-an-organization-or-repository)
+> use a numeric subject format: `repository_owner_id:<owner_id>:repository_id:<repo_id>:...`.
+> You can find these IDs via `gh api repos/{owner}/{repo} --jq '.owner.id, .id'`.
+> If your org has NOT customized the template, use the default `repo:ORG/REPO:...` format.
 
 ```powershell
 $AppId = "YOUR_APP_ID"  # From Step 1
 
+# --- Option A: Default subject format ---
 # Main branch (prod)
 az ad app federated-credential create --id $AppId --parameters '{
     "name": "github-main",
@@ -92,11 +106,23 @@ az ad app federated-credential create --id $AppId --parameters '{
     "audiences": ["api://AzureADTokenExchange"]
 }'
 
+# --- Option B: Customized (numeric ID) subject format ---
+# Use this if your org has customized the OIDC subject claim template.
+# Replace OWNER_ID and REPO_ID with actual values from the GitHub API.
+
+# Main branch (prod)
+az ad app federated-credential create --id $AppId --parameters '{
+    "name": "github-main",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:ref:refs/heads/main",
+    "audiences": ["api://AzureADTokenExchange"]
+}'
+
 # Integration branch
 az ad app federated-credential create --id $AppId --parameters '{
     "name": "github-int-agentic",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/int-agentic",
+    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:ref:refs/heads/int-agentic",
     "audiences": ["api://AzureADTokenExchange"]
 }'
 
@@ -104,7 +130,7 @@ az ad app federated-credential create --id $AppId --parameters '{
 az ad app federated-credential create --id $AppId --parameters '{
     "name": "github-pullrequests",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:YOUR_ORG/YOUR_REPO:pull_request",
+    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:pull_request",
     "audiences": ["api://AzureADTokenExchange"]
 }'
 ```
@@ -188,16 +214,44 @@ Create GitHub Environments (`dev`, `integration`, `prod`) for environment-specif
 
 ---
 
-## Workflow Triggers
+## Pipeline Modes
+
+The orchestrator has two modes determined by the trigger:
+
+| Trigger | Mode | What runs | Environment |
+|---------|------|-----------|-------------|
+| **PR → `main`** | Tests only | `resolve-endpoints` → `integration-tests` | `prod` |
+| **PR → `int-agentic`** | Tests only | `resolve-endpoints` → `integration-tests` | `integration` |
+| **Push to `main`** (after merge) | Full deploy | Preflight → Infra → Build → Update → Tests | `prod` |
+| **Push to `tjs-infra-as-code`** | Full deploy | Preflight → Infra → Build → Update → Tests → Destroy | `dev` |
+| **Manual dispatch** | Full deploy | Preflight → Infra → Build → Update → Tests | Chosen env |
+
+### Tests-Only Mode (PRs)
+
+PRs do **not** deploy infrastructure or build containers. Instead, the `resolve-endpoints` job
+looks up the existing Container App FQDNs via `az containerapp show` and passes them to the
+integration tests. This validates the PR against the already-deployed target environment.
+
+> **Prerequisite:** The target environment must already be deployed. If the Container Apps
+> don't exist, the `resolve-endpoints` job will fail with an error.
+
+### Full Deploy Mode (Pushes / Manual)
+
+The full pipeline deploys infrastructure via Terraform, builds and pushes Docker images,
+updates the Container Apps, and then runs integration tests against the freshly deployed
+environment.
+
+## Workflow Files
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `orchestrate.yml` | Push to main/int-agentic, PRs, manual | Full deployment pipeline |
-| `infrastructure.yml` | Called by orchestrate | Terraform plan/apply |
-| `docker-application.yml` | Called by orchestrate | Build backend container |
-| `docker-mcp.yml` | Called by orchestrate | Build MCP container |
-| `update-containers.yml` | Called by orchestrate | Refresh Container Apps |
+| `orchestrate.yml` | PRs, push to main/tjs-infra-as-code, manual | Orchestrates full or tests-only pipeline |
+| `infrastructure.yml` | Called by orchestrate (full deploy) | Terraform plan/apply |
+| `docker-application.yml` | Called by orchestrate (full deploy) | Build backend container |
+| `docker-mcp.yml` | Called by orchestrate (full deploy) | Build MCP container |
+| `update-containers.yml` | Called by orchestrate (full deploy) | Refresh Container Apps |
 | `destroy.yml` | Called by orchestrate (dev only) | Terraform destroy |
+| `integration-tests.yml` | Called by orchestrate (both modes) | Run pytest integration tests |
 
 ## Branch to Environment Mapping
 
@@ -232,8 +286,14 @@ $env:TFSTATE_KEY = "local-dev.tfstate"
 
 ## Troubleshooting
 
-### OIDC Login Fails
-- Verify federated credential subject matches exactly: `repo:ORG/REPO:ref:refs/heads/BRANCH`
+### OIDC Login Fails (AADSTS700213)
+- **Most common cause:** Subject claim format mismatch. GitHub orgs with a customized OIDC subject
+  claim template use `repository_owner_id:<id>:repository_id:<id>:...` instead of `repo:org/repo:...`.
+  Check the error message for the `subject` value GitHub is presenting, and update the federated
+  credential to match exactly.
+- Verify federated credential subject matches exactly what GitHub presents in the OIDC token
+- Find your org's subject format: look at the error's `subject` field, or check with
+  `gh api orgs/{org}/actions/oidc/customization/sub`
 - Check the App Registration has a service principal created
 - Ensure role assignments are at subscription scope
 
