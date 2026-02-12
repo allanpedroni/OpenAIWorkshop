@@ -178,10 +178,10 @@ az role assignment create `
     --role "Azure AI User" `
     --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryRG/providers/Microsoft.MachineLearningServices/workspaces/$HubName"
 
-# Cognitive Services OpenAI User – invoke judge models (gpt-4o) for LLM-as-judge evaluators
+# Cognitive Services OpenAI Contributor – invoke judge models AND push eval results via /openai/evals API
 az role assignment create `
     --assignee $AppId `
-    --role "Cognitive Services OpenAI User" `
+    --role "Cognitive Services OpenAI Contributor" `
     --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryRG/providers/Microsoft.CognitiveServices/accounts/$AIServicesName"
 
 # Storage Blob Data Contributor – upload evaluation data to Foundry storage
