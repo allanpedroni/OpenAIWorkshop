@@ -76,7 +76,10 @@ jobs:
       - name: Install evaluation dependencies
         run: |
           pip install --upgrade pip
-          pip install \
+          # --pre is required so azure-ai-projects>=2.0.0b2 resolves to the
+          # 2.x pre-release (2.0.0b3) instead of the 1.0.0 GA release.
+          # The 2.x SDK is needed for azure_ai_evaluator support.
+          pip install --pre \
             azure-ai-evaluation>=1.14.0 \
             azure-ai-projects>=2.0.0b2 \
             azure-identity>=1.19.0 \
@@ -127,8 +130,9 @@ jobs:
           AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
           AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_EVAL_ENDPOINT }}
           AZURE_OPENAI_EVAL_DEPLOYMENT: ${{ vars.AZURE_OPENAI_EVAL_DEPLOYMENT }}
-          AZURE_OPENAI_API_VERSION: '2025-04-01-preview'
-          OPENAI_API_VERSION: '2025-04-01-preview'
+          # Note: Do NOT set AZURE_OPENAI_API_VERSION or OPENAI_API_VERSION here.
+          # The azure-ai-projects 2.x SDK sets api-version=2025-11-15-preview
+          # automatically, which is required for azure_ai_evaluator support.
 
       - name: Generate evaluation summary
         if: always()
