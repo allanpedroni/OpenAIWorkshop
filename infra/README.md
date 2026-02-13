@@ -336,78 +336,43 @@ az containerapp logs show --name ca-be-002 --resource-group rg-OpenAIWorkshop-de
 
 ## Automated CI/CD (GitHub Actions)
 
-For enterprise deployments, we recommend using GitHub Actions with OIDC authentication for secure, automated deployments.
+The project uses a fully automated CI/CD pipeline with **per-developer environments** and **OIDC authentication** (no stored secrets).
 
-### 📖 Complete Setup Guide
+### Pipeline Flow
 
-See **[GITHUB_ACTIONS_SETUP.md](./GITHUB_ACTIONS_SETUP.md)** for detailed instructions on:
-
-- Creating Azure App Registration with federated credentials
-- Configuring GitHub repository variables and secrets
-- Setting up Terraform remote state in Azure Storage
-- Granting required Azure RBAC roles
-
-### Quick Overview
-
-```mermaid
-flowchart TB
-    subgraph GitHub["GitHub Repository"]
-        Push["Git Push"]
-        Orchestrate["orchestrate.yml"]
-        Infra["infrastructure.yml"]
-        DockerApp["docker-application.yml"]
-        DockerMCP["docker-mcp.yml"]
-        Update["update-containers.yml"]
-        Tests["integration-tests.yml"]
-    end
-    
-    subgraph Azure["Azure"]
-        OIDC["OIDC Federation"]
-        TFState["Terraform State"]
-        ACR["Container Registry"]
-        Resources["Azure Resources"]
-    end
-    
-    Push --> Orchestrate
-    Orchestrate --> OIDC
-    Orchestrate --> Infra
-    Infra --> TFState
-    Infra --> Resources
-    Orchestrate --> DockerApp
-    Orchestrate --> DockerMCP
-    DockerApp --> ACR
-    DockerMCP --> ACR
-    Orchestrate --> Update
-    Update --> Resources
-    Orchestrate --> Tests
+```
+*-dev push → CI/CD Pipeline → auto-merge → int-agentic → PR to main → human review → production deploy
 ```
 
-### GitHub Actions Features
+Doc-only changes (`.md`, `docs/`, `LICENSE`) are ignored and do not trigger the pipeline.
 
-| Feature | Description |
-|---------|-------------|
-| **OIDC Authentication** | No secrets stored in GitHub - uses federated identity |
-| **Remote State** | Terraform state stored in Azure Storage for team collaboration |
-| **Multi-Environment** | Automatic environment detection based on branch |
-| **Parallel Builds** | Backend and MCP containers build simultaneously |
-| **Integration Tests** | Automated tests run after deployment |
-| **Auto Cleanup** | Optional infrastructure destruction for dev branches |
+### Setup
 
-### Required GitHub Variables
+1. **Azure**: App Registration with OIDC federated credentials — see [GITHUB_ACTIONS_SETUP.md](./GITHUB_ACTIONS_SETUP.md)
+2. **GitHub**: Create an Environment (`integration-<name>`) with environment-level variables (no repo-level vars)
+3. **Terraform state**: Storage account in Azure — see [GITHUB_ACTIONS_SETUP.md](./GITHUB_ACTIONS_SETUP.md)
 
-Set these in your repository settings (Settings → Secrets and variables → Actions → Variables):
+### Required Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `AZURE_CLIENT_ID` | App Registration Client ID | `1d34c51d-...` |
-| `AZURE_TENANT_ID` | Azure AD Tenant ID | `0fbe7234-...` |
-| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID | `840b5c5c-...` |
-| `TFSTATE_RG` | Resource group for Terraform state | `rg-tfstate` |
-| `TFSTATE_ACCOUNT` | Storage account for Terraform state | `sttfstateoaiworkshop` |
-| `TFSTATE_CONTAINER` | Blob container for state files | `tfstate` |
-| `PROJECT_NAME` | Project name for resource naming | `OpenAIWorkshop` |
-| `ITERATION` | Iteration suffix | `002` |
-| `AZ_REGION` | Azure region | `eastus2` |
+| Variable | Example |
+|----------|---------|
+| `AZURE_CLIENT_ID` | `1d34c51d-...` |
+| `AZURE_TENANT_ID` | `0fbe7234-...` |
+| `AZURE_SUBSCRIPTION_ID` | `840b5c5c-...` |
+| `AZ_REGION` | `eastus2` |
+| `PROJECT_NAME` | `OpenAIWorkshop` |
+| `ITERATION` | `002` |
+| `TFSTATE_RG` / `TFSTATE_ACCOUNT` / `TFSTATE_CONTAINER` | TF state storage |
+| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry endpoint |
+| `AZURE_OPENAI_EVAL_DEPLOYMENT` | Eval model name |
+
+### 📖 Full Pipeline Documentation
+
+See **[../.github/workflows/readme.md](../.github/workflows/readme.md)** for complete details on:
+- Pipeline stages and promotion flow
+- Workflow file reference
+- Per-developer environment architecture
+- Path filtering rules
 
 ---
 
