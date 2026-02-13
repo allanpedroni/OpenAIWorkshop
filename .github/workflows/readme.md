@@ -1,40 +1,81 @@
-# Workflows
+# CI/CD Pipeline
 
-## infra-plan-apply.yml
-
-### Summary
-
-The infra plan and apply pipeline is a pipeline to deploy the infrastructure necessary for the Azure Open AI Workshop ot run. It is currently configured to do a workflow dispatch that expects you to choose whether you want bicep or terraform as well as a target environment. Terraform is currently tested. 
-
-### Requirements
-
-#### Environment Variables in GitHub
-
-Configure your repo to have necessary variables for your environments. At a minimum, the following are needed:
-- AZ_REGION: azure region you plan to deploy to
-- AZURE_CLIENT_ID: the deployment client. Currently, this is used with an OIDC process so we don't need to set the secrets. Because of the way we are deploying, needs the ability to assign RBAC in Azure as well as creating resources.
-- AZURE_SUBSCRIPTION_ID: the subscription to deploy into.
-- AZURE_TENANT_ID: the tenant the client was created in
-- DOCKER_IMAGE_BACKEND: docker image repo/name:tag from docker hub for backend FastAPI service. Still need to test with ACR. Also need to test with dynamic build from the repo.
-- DOCKER_IMAGE_MCP: docker image repo/name:tag from docker hub for MCP service. Still need to test with ACR. Also need to test with dynamic build from the repo.
-
-Required for terraform:
-- TFSTATE_ACCOUNT: We expect an Azure Storage account for the backend. This is the account name.
-- TFSTATE_CONTAINER: the blob container within the storage account where we will hold the state.
-- TFSTATE_RG: resource group holding the storage account.
-
-#### Azure Set Up
-
-- Azure Subscription
-- Resource group with a storage account for terraform
-- Azure Service Principal (app registration) configured with federated credentials:
+## Flow
 
 ```
-az ad app federated-credential create --id "$APP_ID" --parameters "$(jq -cn \
---arg org "$ORG" --arg repo "$REPO_NAME" '{
-name: ("github-"+$repo+"-env-dev"),
-issuer: "https://token.actions.githubusercontent.com",
-subject: ("repo:"+$org+"/"+$repo+":environment:dev"),
-audiences: ["api://AzureADTokenExchange"]
-}')"
+*-dev  ──push──▶  CI/CD Pipeline (8 stages)  ──pass──▶  auto-merge PR → int-agentic
+                                                                │
+int-agentic  ◀──────────────────────────────────────────────────┘
+     │
+     └──push──▶  promote-to-main.yml  ──▶  creates/updates PR → main
+                                                                │
+main  ◀──────────  human review + merge  ◀──────────────────────┘
+     │
+     └──push──▶  CI/CD Pipeline (production deploy)
 ```
+
+**Doc-only changes** (`.md`, `docs/`, `LICENSE`) are ignored — no pipeline runs.
+
+## Workflows
+
+| File | Trigger | Purpose |
+|------|---------|---------|
+| `orchestrate.yml` | push to `*-dev`/`main`, PR to `main` | Main CI/CD: infra → build → deploy → test → eval → auto-merge |
+| `promote-to-main.yml` | push to `int-agentic` | Creates/updates a rolling PR from `int-agentic` → `main` |
+| `infrastructure.yml` | called by orchestrate | Terraform plan + apply with auto-import recovery |
+| `docker-application.yml` | called by orchestrate | Build & push backend container to ACR |
+| `docker-mcp.yml` | called by orchestrate | Build & push MCP container to ACR |
+| `update-containers.yml` | called by orchestrate | Deploy new images to Container Apps |
+| `integration-tests.yml` | called by orchestrate | API tests against live environment |
+| `agent-evaluation.yml` | called by orchestrate | Agent quality eval → Azure AI Foundry |
+| `destroy.yml` | manual dispatch | Terraform destroy for a target environment |
+
+## Pipeline Stages
+
+| # | Stage | Push | PR |
+|---|-------|------|----|
+| 0 | **pipeline-config** — resolve environment & mode | ✅ | ✅ |
+| 1 | **preflight** — unlock TF state storage | ✅ | — |
+| 2 | **deploy-infrastructure** — Terraform | ✅ | — |
+| 3 | **build containers** (backend + MCP, parallel) | ✅ | — |
+| 4 | **update-containers** — deploy to Container Apps | ✅ | — |
+| — | **resolve-endpoints** — look up existing env | — | ✅ |
+| 5 | **integration-tests** | ✅ | ✅* |
+| 6 | **agent-evaluation** → Foundry | ✅ | — |
+| 7 | **auto-merge** — squash-merge dev PR → int-agentic | ✅† | — |
+
+\* Skipped if target environment not yet deployed  
+† Only on `*-dev` branches
+
+## Per-Developer Environments
+
+Each developer has their own GitHub Environment (`integration-<name>`) with their own Azure subscription and OIDC credentials. All config is stored as **environment-level variables** (zero repo-level variables).
+
+Branch mapping: `james-dev` → `integration-james`, `main` → `production`
+
+## Required Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `AZURE_CLIENT_ID` | App registration client ID (OIDC) |
+| `AZURE_TENANT_ID` | Entra ID tenant |
+| `AZURE_SUBSCRIPTION_ID` | Target subscription |
+| `AZ_REGION` | Azure region |
+| `PROJECT_NAME` | Project name (e.g. `OpenAIWorkshop`) |
+| `ITERATION` | Deployment iteration (e.g. `002`) |
+| `TFSTATE_ACCOUNT` | TF state storage account |
+| `TFSTATE_CONTAINER` | TF state blob container |
+| `TFSTATE_RG` | TF state resource group |
+| `MCP_SERVER_URI` | MCP service URI |
+| `AZURE_OPENAI_CHAT_DEPLOYMENT` | Chat model deployment |
+| `AZURE_OPENAI_EVAL_DEPLOYMENT` | Eval model deployment |
+| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint |
+| `AZURE_OPENAI_API_VERSION` | OpenAI API version |
+
+## Azure Setup
+
+1. Azure subscription with a resource group + storage account for Terraform state
+2. App registration with OIDC federated credentials for each GitHub Environment:
+   ```
+   Subject: repo:microsoft/OpenAIWorkshop:environment:<env-name>
+   ```

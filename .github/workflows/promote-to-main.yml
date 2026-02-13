@@ -11,6 +11,10 @@ on:
   push:
     branches:
       - int-agentic
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
 
 permissions:
   contents: read

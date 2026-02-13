@@ -29,11 +29,21 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/workflows/readme.md'
 
   push:
     branches:
       - main
       - '*-dev'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/workflows/readme.md'
 
 permissions:
   contents: write
