@@ -82,21 +82,73 @@ jobs:
           export ARM_TENANT_ID="${{ vars.AZURE_TENANT_ID }}"
           export ARM_SUBSCRIPTION_ID="${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
+          # Common -var flags used by plan and import
+          TF_VARS=(
+            -var project_name=${{ github.event.repository.name }}
+            -var environment=${{ inputs.environment }}
+            -var tenant_id=${{ vars.AZURE_TENANT_ID }}
+            -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }}
+            -var acr_name=${{ vars.ACR_NAME }}
+            -var location=${{ vars.AZ_REGION }}
+            -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }}
+            -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }}
+            -var iteration=${{ vars.ITERATION }}
+          )
+
           terraform init -backend-config="resource_group_name=${TFSTATE_RG}" \
                          -backend-config="key=${TFSTATE_KEY}" -backend-config="storage_account_name=${TFSTATE_ACCOUNT}" \
                          -backend-config="container_name=${TFSTATE_CONTAINER}" -backend-config="use_oidc=true" -backend-config="use_azuread_auth=true"
-          terraform plan -out tfplan \
-            -var project_name=${{ github.event.repository.name }} \
-            -var environment=${{ inputs.environment }} \
-            -var tenant_id=${{ vars.AZURE_TENANT_ID }} \
-            -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
-            -var acr_name=${{ vars.ACR_NAME }} \
-            -var location=${{ vars.AZ_REGION }} \
-            -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
-            -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
-            -var iteration=${{ vars.ITERATION }}
 
-          terraform apply -auto-approve tfplan
+          # ── Apply with auto-import on "already exists" errors ──
+          # If a prior run partially created resources but crashed before recording
+          # them in state, Terraform will fail with "already exists". This loop
+          # detects those errors, auto-imports the orphaned resources, and retries.
+          MAX_ATTEMPTS=3
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "🔄 Terraform apply attempt $attempt/$MAX_ATTEMPTS"
+
+            terraform plan -out tfplan "${TF_VARS[@]}"
+
+            if terraform apply -auto-approve tfplan 2>&1 | tee /tmp/tf_apply.log; then
+              echo "✅ Terraform apply succeeded"
+              break
+            fi
+
+            # Check if the failure is due to "already exists" errors
+            if ! grep -q "already exists" /tmp/tf_apply.log; then
+              echo "❌ Terraform failed with a non-import error"
+              cat /tmp/tf_apply.log
+              exit 1
+            fi
+
+            if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+              echo "❌ Terraform failed after $MAX_ATTEMPTS attempts"
+              cat /tmp/tf_apply.log
+              exit 1
+            fi
+
+            echo "⚠️ Detected 'already exists' errors — auto-importing orphaned resources..."
+
+            # Parse error output: extract terraform address and Azure resource ID pairs
+            # Error format:  with azurerm_container_app.mcp,
+            # followed by:   a resource with the ID "/.../containerApps/ca-mcp-002" already exists
+            while IFS= read -r line; do
+              # Extract the TF resource address (e.g. azurerm_container_app.mcp)
+              tf_addr=$(echo "$line" | grep -oP 'with \K[a-zA-Z0-9_.]+(?=,)')
+              # Extract the Azure resource ID
+              azure_id=$(echo "$line" | grep -oP 'the ID "\K[^"]+')
+
+              if [ -n "$tf_addr" ] && [ -n "$azure_id" ]; then
+                echo "  📥 Importing $tf_addr → $azure_id"
+                terraform import "${TF_VARS[@]}" "$tf_addr" "$azure_id" || true
+              fi
+            done < <(
+              # Combine consecutive lines so address + ID are on the same logical line
+              cat /tmp/tf_apply.log | tr '\n' '§' | sed 's/§│/│/g' | tr '§' '\n' | grep "already exists"
+            )
+
+            echo "🔁 Retrying terraform apply..."
+          done
 
           output=$(terraform output -raw openai_endpoint 2>/dev/null || true)
           echo "MODEL_ENDPOINT=$output" >> $GITHUB_OUTPUT
