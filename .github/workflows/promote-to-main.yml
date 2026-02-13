@@ -1,0 +1,94 @@
+name: Promote to Main
+
+# ─────────────────────────────────────────────────────────────────────
+# Triggered when int-agentic receives a merge (push).
+# Creates or updates a single rolling PR from int-agentic → main.
+# The PR accumulates all developer changes and requires human review
+# before merging to production.
+# ─────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - int-agentic
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create or update PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if there's already an open PR from int-agentic → main
+          EXISTING_PR=$(gh pr list \
+            --base main \
+            --head int-agentic \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "✅ PR #${EXISTING_PR} already exists (int-agentic → main)"
+            echo "   Updating PR body with latest commit info..."
+
+            # Get recent commits since the PR was created
+            RECENT_COMMITS=$(git log origin/main..HEAD --oneline --no-merges | head -20)
+
+            gh pr edit "$EXISTING_PR" --body "## Promotion: int-agentic → main
+
+          This is an auto-maintained PR that promotes changes from \`int-agentic\` to \`main\` (production).
+
+          **Review required** before merging to production.
+
+          ### Recent Changes
+          \`\`\`
+          ${RECENT_COMMITS}
+          \`\`\`
+
+          ### Pipeline Status
+          - Integration tests passed on each developer's environment before merge to int-agentic
+          - Merging this PR will trigger a full production deployment
+
+          ---
+          _Last updated: $(date -u '+%Y-%m-%d %H:%M UTC') by commit ${{ github.sha }}_"
+
+            echo "✅ PR #${EXISTING_PR} body updated"
+          else
+            echo "📝 Creating new PR: int-agentic → main"
+
+            RECENT_COMMITS=$(git log origin/main..HEAD --oneline --no-merges | head -20)
+
+            gh pr create \
+              --base main \
+              --head int-agentic \
+              --title "Promote: int-agentic → main (production)" \
+              --body "## Promotion: int-agentic → main
+
+          This is an auto-maintained PR that promotes changes from \`int-agentic\` to \`main\` (production).
+
+          **Review required** before merging to production.
+
+          ### Recent Changes
+          \`\`\`
+          ${RECENT_COMMITS}
+          \`\`\`
+
+          ### Pipeline Status
+          - Integration tests passed on each developer's environment before merge to int-agentic
+          - Merging this PR will trigger a full production deployment
+
+          ---
+          _Created: $(date -u '+%Y-%m-%d %H:%M UTC') by commit ${{ github.sha }}_"
+
+            echo "✅ New PR created"
+          fi

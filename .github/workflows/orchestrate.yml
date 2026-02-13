@@ -2,10 +2,15 @@ name: CI/CD Pipeline
 
 # ─────────────────────────────────────────────────────────────────────
 # Pipeline modes:
-#   PR → main / int-agentic  ➜  tests-only  (validate against existing env)
+#   PR → main                ➜  tests-only  (validate against existing env)
 #   Push → main              ➜  full deploy  (deploy to production)
 #   Push → *-dev             ➜  full deploy  (deploy to integration-<name>)
 #   Manual dispatch          ➜  full deploy  (chosen environment)
+#
+# Promotion flow:
+#   *-dev push → full pipeline → auto-merge PR to int-agentic
+#   int-agentic push → promote-to-main.yml → creates/updates PR to main
+#   main PR → human review + tests-only → merge → full deploy to production
 #
 # Per-developer environments:
 #   Each developer pushes to their own <name>-dev branch.
@@ -31,7 +36,8 @@ on:
       - '*-dev'
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   id-token: write
 
 
@@ -254,6 +260,53 @@ jobs:
       backend_endpoint: ${{ needs.deploy-infrastructure.outputs.backend_endpoint }}
       eval_limit: 5
     secrets: inherit
+
+  # ────────────────────────────────────────────────────────────────────
+  # Step 7: Auto-merge dev branch PR into int-agentic
+  #   After a successful full deploy from a *-dev branch, automatically
+  #   merge the open PR from that branch into int-agentic. This triggers
+  #   the promote-to-main workflow which creates/updates a PR to main.
+  # ────────────────────────────────────────────────────────────────────
+  auto-merge:
+    needs: [pipeline-config, integration-tests, agent-evaluation]
+    if: >-
+      always()
+      && needs.pipeline-config.outputs.full_deploy == 'true'
+      && needs.integration-tests.result == 'success'
+      && (needs.agent-evaluation.result == 'success' || needs.agent-evaluation.result == 'skipped')
+      && github.event_name == 'push'
+      && endsWith(github.ref_name, '-dev')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge dev PR into int-agentic
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "🔍 Looking for open PR: ${BRANCH} → int-agentic"
+
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --base int-agentic \
+            --head "$BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "✅ Found PR #${PR_NUMBER}"
+            echo "🔀 Merging ${BRANCH} → int-agentic..."
+            gh pr merge "$PR_NUMBER" \
+              --repo "${{ github.repository }}" \
+              --squash \
+              --auto \
+              --subject "chore: merge ${BRANCH} into int-agentic (auto)" \
+              --body "Auto-merged after successful CI/CD pipeline run ${{ github.run_id }}"
+            echo "✅ PR #${PR_NUMBER} merge initiated"
+          else
+            echo "ℹ️ No open PR found from ${BRANCH} → int-agentic"
+            echo "   Create one with: gh pr create --base int-agentic --head ${BRANCH}"
+          fi
 
   # ────────────────────────────────────────────────────────────────────
   # NOTE: Auto-destroy is disabled. All environments (integration-* and
