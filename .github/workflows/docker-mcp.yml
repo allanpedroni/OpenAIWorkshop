@@ -46,10 +46,11 @@ jobs:
         id: acr
         run: |
           # Construct ACR name matching Terraform pattern: {project}{env}acr{iteration}
+          # ACR names must be alphanumeric — strip hyphens to match Terraform's replace("-", "")
           PROJECT="${{ vars.PROJECT_NAME || 'OpenAIWorkshop' }}"
           ENV="${{ inputs.environment || 'dev' }}"
           ITERATION="${{ vars.ITERATION || '002' }}"
-          ACR_NAME="${PROJECT}${ENV}acr${ITERATION}"
+          ACR_NAME=$(echo "${PROJECT}${ENV}acr${ITERATION}" | tr -d '-')
           echo "name=${ACR_NAME}" >> $GITHUB_OUTPUT
           echo "server=${ACR_NAME}.azurecr.io" >> $GITHUB_OUTPUT
           echo "Using ACR: ${ACR_NAME}"
