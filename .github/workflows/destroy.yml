@@ -30,7 +30,7 @@ jobs:
   terraform_destroy:
     name: Terraform Destroy
     runs-on: ubuntu-latest
-    # environment: ${{ inputs.environment || 'dev' }}  # Commented out to use repo-level variables
+    environment: ${{ inputs.environment || 'integration' }}
     permissions:
       id-token: write
       contents: read
@@ -66,13 +66,14 @@ jobs:
             -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
             -var acr_name=${{ vars.ACR_NAME }} \
             -var location=${{ vars.AZ_REGION }} \
-            -var environment=${{ inputs.environment || 'dev' }} \
+            -var environment=${{ inputs.environment || 'integration' }} \
             -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
             -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
-            -var iteration=${{ inputs.environment || 'dev' }}
+            -var iteration=${{ vars.ITERATION }}
         env:
           TFSTATE_RG: ${{ vars.TFSTATE_RG }}
           TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
           TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
-          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ github.ref_name }}.tfstate"
+          # Use environment name for state key — must match infrastructure.yml
+          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ inputs.environment || 'integration' }}.tfstate"
 

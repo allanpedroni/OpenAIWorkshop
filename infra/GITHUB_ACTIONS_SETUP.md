@@ -7,7 +7,8 @@ This guide documents how to configure GitHub Actions for automated infrastructur
 The CI/CD pipeline uses:
 - **OIDC Authentication** - No secrets stored in GitHub, uses federated identity
 - **Remote Terraform State** - Shared state in Azure Storage for team collaboration
-- **Environment-based Deployments** - Separate configs for dev, integration, prod
+- **Per-developer GitHub Environments** - Each developer has their own `integration-<name>` environment backed by their own Azure subscription
+- **Environment-scoped Variables** - All Azure credentials and config are stored per-environment, not at repo level
 
 ## Architecture
 
@@ -17,6 +18,10 @@ The CI/CD pipeline uses:
 ├─────────────────────────────────────────────────────────────────────┤
 │  orchestrate.yml                                                     │
 │    ├── pipeline-config (determine mode + environment)               │
+│    │     ├── main branch       → production environment             │
+│    │     ├── james-dev branch  → integration-james environment      │
+│    │     ├── nicole-dev branch → integration-nicole environment     │
+│    │     └── <name>-dev branch → integration-<name> environment     │
 │    │                                                                 │
 │    ├── [Full Deploy – push/manual]                                   │
 │    │     ├── preflight (enable storage access)                      │
@@ -25,8 +30,7 @@ The CI/CD pipeline uses:
 │    │     ├── docker-mcp.yml (build MCP service image)               │
 │    │     ├── update-containers.yml (refresh running apps)           │
 │    │     ├── integration-tests.yml (smoke tests)                    │
-│    │     ├── agent-evaluation.yml (AI quality evaluation)           │
-│    │     └── destroy.yml (optional cleanup, dev only)               │
+│    │     └── agent-evaluation.yml (AI quality evaluation)           │
 │    │                                                                 │
 │    ├── [Tests Only – pull requests]                                  │
 │    │     └── resolve-endpoints (az containerapp show)               │
@@ -37,10 +41,9 @@ The CI/CD pipeline uses:
                               │ OIDC (no secrets)
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Azure                                        │
+│                  Azure (per developer subscription)                  │
 ├─────────────────────────────────────────────────────────────────────┤
-│  ├── App Registration (GitHub-Actions-OpenAIWorkshop)               │
-│  │     └── Federated Credentials (main, int-agentic, PRs)           │
+│  ├── App Registration (federated credential for environment)        │
 │  ├── Storage Account (Terraform state)                              │
 │  ├── Container Registry (Docker images)                             │
 │  ├── Container Apps (MCP + Backend)                                 │
@@ -90,53 +93,48 @@ Write-Host "Subscription ID: $SubscriptionId"
 
 ## Step 2: Configure Federated Credentials
 
-Create federated credentials for each branch/environment.
+Create federated credentials for the GitHub environment that maps to this developer.
 
-> **Important:** GitHub org/repos that have a [customized OIDC subject claim template](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect#customizing-the-subject-claims-for-an-organization-or-repository)
-> use a numeric subject format: `repository_owner_id:<owner_id>:repository_id:<repo_id>:...`.
-> You can find these IDs via `gh api repos/{owner}/{repo} --jq '.owner.id, .id'`.
-> If your org has NOT customized the template, use the default `repo:ORG/REPO:...` format.
+> **Important:** This repo uses a [customized OIDC subject claim template](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect#customizing-the-subject-claims-for-an-organization-or-repository)
+> with `repository_owner_id` and `repository_id` instead of the default `repo:ORG/REPO:...` format.
+> All CI jobs bind an `environment:` context, so the OIDC subject includes `environment:<env-name>`.
 
 ```powershell
 $AppId = "YOUR_APP_ID"  # From Step 1
 
-# --- Option A: Default subject format ---
-# Main branch (prod)
+# ── Per-developer integration environment ──
+# Replace <name> with your developer name (e.g., james, nicole, tim)
+# The subject must exactly match what GitHub presents in the OIDC token.
 az ad app federated-credential create --id $AppId --parameters '{
-    "name": "github-main",
+    "name": "github-env-integration-<name>",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:YOUR_ORG/YOUR_REPO:ref:refs/heads/main",
+    "subject": "repository_owner_id:6154722:repository_id:605201834:environment:integration-<name>",
     "audiences": ["api://AzureADTokenExchange"]
 }'
 
-# --- Option B: Customized (numeric ID) subject format ---
-# Use this if your org has customized the OIDC subject claim template.
-# Replace OWNER_ID and REPO_ID with actual values from the GitHub API.
-
-# Main branch (prod)
+# ── Production environment (only needed for the prod subscription owner) ──
 az ad app federated-credential create --id $AppId --parameters '{
-    "name": "github-main",
+    "name": "github-env-production",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:ref:refs/heads/main",
+    "subject": "repository_owner_id:6154722:repository_id:605201834:environment:production",
     "audiences": ["api://AzureADTokenExchange"]
 }'
 
-# Integration branch
-az ad app federated-credential create --id $AppId --parameters '{
-    "name": "github-int-agentic",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:ref:refs/heads/int-agentic",
-    "audiences": ["api://AzureADTokenExchange"]
-}'
-
-# Pull Requests
+# ── Pull Requests (for PR validation against existing env) ──
+# Note: PR jobs also bind environment:, so the subject includes it.
+# You may need a credential for the PR context too if your PRs run OIDC.
 az ad app federated-credential create --id $AppId --parameters '{
     "name": "github-pullrequests",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repository_owner_id:OWNER_ID:repository_id:REPO_ID:pull_request",
+    "subject": "repository_owner_id:6154722:repository_id:605201834:pull_request",
     "audiences": ["api://AzureADTokenExchange"]
 }'
 ```
+
+> **How to find your IDs:**
+> - Owner ID: `gh api repos/microsoft/OpenAIWorkshop --jq '.owner.id'` → `6154722`
+> - Repo ID: `gh api repos/microsoft/OpenAIWorkshop --jq '.id'` → `605201834`
+> - Check current OIDC template: `gh api repos/microsoft/OpenAIWorkshop/actions/oidc/customization/sub`
 
 ## Step 3: Assign Azure Roles
 
@@ -224,36 +222,44 @@ az role assignment create `
     --scope $STORAGE_ID
 ```
 
-## Step 5: Configure GitHub Repository Variables
+## Step 5: Configure GitHub Environment Variables
 
-Go to **GitHub → Repository → Settings → Secrets and Variables → Actions → Variables**
+All variables are stored at the **environment level** (not repo level). Each developer's
+`integration-<name>` environment contains their own Azure subscription credentials.
 
-### Required Variables
+Go to **GitHub → Repository → Settings → Environments → `integration-<name>` → Environment variables**
+
+### Required Variables (per environment)
 
 | Variable | Description | Example Value |
 |----------|-------------|---------------|
-| `AZURE_CLIENT_ID` | App Registration Client ID | `1d34c51d-9d49-48f3-9e48-6a0f099c5f03` |
-| `AZURE_TENANT_ID` | Azure AD Tenant ID | `0fbe7234-45ea-498b-b7e4-1a8b2d3be4d9` |
-| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID | `840b5c5c-3f4a-459a-94fc-6bad2a969f9d` |
+| `AZURE_CLIENT_ID` | App Registration Client ID | `1d34c51d-...` |
+| `AZURE_TENANT_ID` | Azure AD Tenant ID | `0fbe7234-...` |
+| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID | `840b5c5c-...` |
 | `TFSTATE_RG` | Resource group for TF state | `rg-tfstate` |
-| `TFSTATE_ACCOUNT` | Storage account name | `sttfstateoaiworkshop` |
+| `TFSTATE_ACCOUNT` | Storage account name (globally unique) | `sttfstateoaiworkshop` |
 | `TFSTATE_CONTAINER` | Blob container name | `tfstate` |
-| `ACR_NAME` | Azure Container Registry name | `acropenaiworkshop002` |
-| `PROJECT_NAME` | Project identifier | `OpenAIWorkshop` |
+| `ACR_NAME` | Azure Container Registry name | `OpenAIWorkshopdevacr002` |
+| `PROJECT_NAME` | Project identifier | `openaiworkshop` |
 | `ITERATION` | Deployment iteration | `002` |
 | `AZ_REGION` | Azure region | `eastus2` |
-| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint for evaluation | `https://eastus2oai.services.ai.azure.com/api/projects/eastus2` |
-| `AZURE_OPENAI_EVAL_ENDPOINT` | AI Services endpoint for judge models | `https://eastus2oai.services.ai.azure.com/` |
+| `DOCKER_IMAGE_MCP` | MCP Docker image name | `mcp-service` |
+| `DOCKER_IMAGE_BACKEND` | Backend Docker image name | `backend-service` |
+| `REGISTRY_LOGIN_SERVER` | Container registry server | `docker.io` |
+| `AZURE_AI_PROJECT_ENDPOINT` | AI Foundry project endpoint for evaluation | `https://...services.ai.azure.com/api/projects/...` |
+| `AZURE_OPENAI_EVAL_ENDPOINT` | AI Services endpoint for judge models | `https://...services.ai.azure.com/` |
 | `AZURE_OPENAI_EVAL_DEPLOYMENT` | Model deployment for LLM-as-judge | `gpt-5.2` |
 
-### Optional Environment-Specific Variables
+### Current Environments
 
-Create GitHub Environments (`dev`, `integration`, `prod`) for environment-specific overrides:
-
-| Environment | Variable | Value |
-|-------------|----------|-------|
-| `prod` | `AZ_REGION` | `eastus` |
-| `prod` | `ITERATION` | `001` |
+| Environment | Owner | Branch Mapping |
+|-------------|-------|----------------|
+| `production` | James | `main` |
+| `integration-james` | James | `james-dev` |
+| `integration-nicole` | Nicole | `nicole-dev` |
+| `integration-heena` | Heena | `heena-dev` |
+| `integration-tim` | Tim | `tim-dev` |
+| `integration-matt` | Matt | `matt-dev` |
 
 ---
 
@@ -263,10 +269,10 @@ The orchestrator has two modes determined by the trigger:
 
 | Trigger | Mode | What runs | Environment |
 |---------|------|-----------|-------------|
-| **PR → `main`** | Tests only | `resolve-endpoints` → `integration-tests` | `prod` |
+| **PR → `main`** | Tests only | `resolve-endpoints` → `integration-tests` | `production` |
 | **PR → `int-agentic`** | Tests only | `resolve-endpoints` → `integration-tests` | `integration` |
-| **Push to `main`** (after merge) | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | `prod` |
-| **Push to `tjs-infra-as-code`** | Full deploy | Preflight → Infra → Build → Update → Tests → Eval → Destroy | `dev` |
+| **Push to `main`** (after merge) | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | `production` |
+| **Push to `<name>-dev`** | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | `integration-<name>` |
 | **Manual dispatch** | Full deploy | Preflight → Infra → Build → Update → Tests → Eval | Chosen env |
 
 ### Tests-Only Mode (PRs)
@@ -288,23 +294,42 @@ environment.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `orchestrate.yml` | PRs, push to main/tjs-infra-as-code, manual | Orchestrates full or tests-only pipeline |
+| `orchestrate.yml` | PRs, push to main/*-dev, manual | Orchestrates full or tests-only pipeline |
 | `infrastructure.yml` | Called by orchestrate (full deploy) | Terraform plan/apply |
 | `docker-application.yml` | Called by orchestrate (full deploy) | Build backend container |
 | `docker-mcp.yml` | Called by orchestrate (full deploy) | Build MCP container |
 | `update-containers.yml` | Called by orchestrate (full deploy) | Refresh Container Apps |
-| `destroy.yml` | Called by orchestrate (dev only) | Terraform destroy |
+| `destroy.yml` | Manual dispatch only | Terraform destroy |
 | `agent-evaluation.yml` | Called by orchestrate (full deploy) | AI quality evaluation via Azure AI Foundry |
 | `integration-tests.yml` | Called by orchestrate (both modes) | Run pytest integration tests |
 
 ## Branch to Environment Mapping
 
-| Branch | Environment | Auto-destroy |
-|--------|-------------|--------------|
-| `main` | `prod` | ❌ No |
-| `int-agentic` | `integration` | ❌ No |
-| `tjs-infra-as-code` | `dev` | ✅ Yes |
-| Other branches | `dev` | Depends on config |
+| Branch | Environment | Persistent |
+|--------|-------------|------------|
+| `main` | `production` | ✅ Yes |
+| `james-dev` | `integration-james` | ✅ Yes |
+| `nicole-dev` | `integration-nicole` | ✅ Yes |
+| `heena-dev` | `integration-heena` | ✅ Yes |
+| `tim-dev` | `integration-tim` | ✅ Yes |
+| `matt-dev` | `integration-matt` | ✅ Yes |
+| `<name>-dev` | `integration-<name>` | ✅ Yes |
+
+> All environments persist their infrastructure. To tear down manually, use
+> `workflow_dispatch` → `destroy.yml` with the target environment.
+
+---
+
+## Developer Onboarding
+
+To add a new developer to the pipeline:
+
+1. **Create an Azure App Registration** in the developer's own Azure tenant (Step 1 above)
+2. **Add a federated credential** with subject `repository_owner_id:6154722:repository_id:605201834:environment:integration-<name>` (Step 2 above)
+3. **Assign Azure roles** to the service principal (Steps 3 and 3b above)
+4. **Create TF state storage** in the developer's subscription (Step 4 above)
+5. **Ask a repo admin** to create the `integration-<name>` GitHub Environment and set the 16 environment variables (Step 5 above)
+6. **Developer pushes to `<name>-dev`** branch — the pipeline will pick up the environment automatically
 
 ---
 

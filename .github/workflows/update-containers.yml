@@ -35,7 +35,7 @@ jobs:
   update-containers:
     name: Update Container Apps
     runs-on: ubuntu-latest
-    # environment: ${{ inputs.environment }}  # Commented out to use repo-level variables
+    environment: ${{ inputs.environment }}
     permissions:
       id-token: write
       contents: read

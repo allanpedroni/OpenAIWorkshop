@@ -41,7 +41,7 @@ jobs:
   tf:
     name: Terraform Deployment
     runs-on: ubuntu-latest
-    # environment: removed to use repo-level variables
+    environment: ${{ inputs.environment }}
     if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'tf' }}
     permissions:
       id-token: write
@@ -65,13 +65,13 @@ jobs:
       - name: Terraform Setup
         uses: hashicorp/setup-terraform@v3
 
-      - name: Sanitize branch name for state key
+      - name: Sanitize environment name for state key
         id: sanitize
         run: |
           # Replace / and other invalid chars with - for valid Azure blob name
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          SAFE_BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          echo "branch=$SAFE_BRANCH" >> $GITHUB_OUTPUT
+          ENV="${{ inputs.environment }}"
+          SAFE_ENV=$(echo "$ENV" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "env=$SAFE_ENV" >> $GITHUB_OUTPUT
 
       - name: Terraform Init/Plan/Apply
         id: terraform
@@ -87,14 +87,14 @@ jobs:
                          -backend-config="container_name=${TFSTATE_CONTAINER}" -backend-config="use_oidc=true" -backend-config="use_azuread_auth=true"
           terraform plan -out tfplan \
             -var project_name=${{ github.event.repository.name }} \
-            -var environment=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.base_ref == 'main' && 'prod') || (github.base_ref == 'int-agentic' && 'integration') || 'dev' }} \
+            -var environment=${{ inputs.environment }} \
             -var tenant_id=${{ vars.AZURE_TENANT_ID }} \
             -var subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }} \
             -var acr_name=${{ vars.ACR_NAME }} \
             -var location=${{ vars.AZ_REGION }} \
             -var docker_image_mcp=${{ vars.DOCKER_IMAGE_MCP }} \
             -var docker_image_backend=${{ vars.DOCKER_IMAGE_BACKEND }} \
-            -var iteration=${{ (github.event_name != 'workflow_dispatch' && github.base_ref != 'main' && github.base_ref != 'int-agentic') && '${GITHUB_SHA:0:7}' || vars.ITERATION }}
+            -var iteration=${{ vars.ITERATION }}
 
           terraform apply -auto-approve tfplan
 
@@ -109,12 +109,12 @@ jobs:
           TFSTATE_RG: ${{ vars.TFSTATE_RG }}
           TFSTATE_ACCOUNT: ${{ vars.TFSTATE_ACCOUNT }}
           TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
-          # Use sanitized branch name for valid Azure blob name
-          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ steps.sanitize.outputs.branch }}.tfstate"
+          # Use environment name for state key — each env gets its own TF state
+          TFSTATE_KEY: "${{ github.event.repository.name }}-${{ steps.sanitize.outputs.env }}.tfstate"
 
   bicep:
       runs-on: ubuntu-latest
-      # environment: removed to use repo-level variables
+      environment: ${{ inputs.environment }}
       if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.iac-tool || 'tf') == 'bicep' }}
       permissions:
         id-token: write

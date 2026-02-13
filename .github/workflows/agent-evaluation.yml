@@ -54,6 +54,7 @@ jobs:
   agent-evaluation:
     name: Agent Quality Evaluation
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'integration' }}
     permissions:
       contents: read
       id-token: write   # Needed for OIDC → DefaultAzureCredential

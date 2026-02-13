@@ -3,18 +3,22 @@ name: Orchestrate Deployment
 # ─────────────────────────────────────────────────────────────────────
 # Pipeline modes:
 #   PR → main / int-agentic  ➜  tests-only  (validate against existing env)
-#   Push → main              ➜  full deploy  (deploy to prod after merge)
-#   Push → tjs-infra-as-code ➜  full deploy  (dev, with auto-destroy)
+#   Push → main              ➜  full deploy  (deploy to production)
+#   Push → *-dev             ➜  full deploy  (deploy to integration-<name>)
 #   Manual dispatch          ➜  full deploy  (chosen environment)
+#
+# Per-developer environments:
+#   Each developer pushes to their own <name>-dev branch.
+#   The pipeline maps <name>-dev → integration-<name> environment,
+#   which contains that developer's own Azure subscription credentials.
 # ─────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
     inputs:
       target_env:
-        type: choice
-        description: Environment to deploy
-        options: [dev, test, prod]
+        type: string
+        description: "Environment to deploy (e.g. integration-james, production)"
         required: true
 
   pull_request:
@@ -25,7 +29,7 @@ on:
   push:
     branches:
       - main
-      - tjs-infra-as-code
+      - '*-dev'
 
 permissions:
   contents: read
@@ -51,19 +55,26 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             ENV="${{ inputs.target_env }}"
           elif [ "$EVENT" = "pull_request" ]; then
+            # PRs: resolve from the target (base) branch
             case "${{ github.base_ref }}" in
-              main)         ENV="prod" ;;
+              main)         ENV="production" ;;
               int-agentic)  ENV="integration" ;;
-              *)            ENV="dev" ;;
+              *)            ENV="integration" ;;
             esac
           elif [ "$EVENT" = "push" ]; then
-            case "${{ github.ref_name }}" in
-              main)               ENV="prod" ;;
-              tjs-infra-as-code)  ENV="dev" ;;
-              *)                  ENV="dev" ;;
+            BRANCH="${{ github.ref_name }}"
+            case "$BRANCH" in
+              main)
+                ENV="production" ;;
+              *-dev)
+                # Extract developer name: james-dev → integration-james
+                DEV_NAME="${BRANCH%-dev}"
+                ENV="integration-${DEV_NAME}" ;;
+              *)
+                ENV="integration" ;;
             esac
           else
-            ENV="dev"
+            ENV="integration"
           fi
 
           # ── Resolve pipeline mode ──
@@ -90,6 +101,7 @@ jobs:
     needs: pipeline-config
     if: needs.pipeline-config.outputs.full_deploy == 'true'
     runs-on: ubuntu-latest
+    environment: ${{ needs.pipeline-config.outputs.environment }}
     steps:
       - name: Azure OIDC Login
         uses: azure/login@v2
@@ -155,6 +167,7 @@ jobs:
     needs: pipeline-config
     if: needs.pipeline-config.outputs.full_deploy == 'false'
     runs-on: ubuntu-latest
+    environment: ${{ needs.pipeline-config.outputs.environment }}
     outputs:
       backend_endpoint: ${{ steps.lookup.outputs.backend_endpoint }}
       mcp_endpoint: ${{ steps.lookup.outputs.mcp_endpoint }}
@@ -242,17 +255,7 @@ jobs:
     secrets: inherit
 
   # ────────────────────────────────────────────────────────────────────
-  # Optional: Destroy infrastructure (dev branches only, after tests pass)
+  # NOTE: Auto-destroy is disabled. All environments (integration-* and
+  # production) persist their infrastructure. To tear down an environment
+  # manually, use: workflow_dispatch → destroy.yml with the target env.
   # ────────────────────────────────────────────────────────────────────
-  destroy-infrastructure:
-    needs: [pipeline-config, integration-tests, agent-evaluation]
-    if: >-
-      always()
-      && needs.pipeline-config.outputs.full_deploy == 'true'
-      && needs.integration-tests.result == 'success'
-      && (needs.agent-evaluation.result == 'success' || needs.agent-evaluation.result == 'skipped' || needs.agent-evaluation.result == 'failure')
-      && (github.ref_name == 'tjs-infra-as-code' || github.ref_name == 'james-dev' || (inputs.target_env && inputs.target_env == 'dev'))
-    uses: ./.github/workflows/destroy.yml
-    with:
-      environment: ${{ needs.pipeline-config.outputs.environment }}
-    secrets: inherit
