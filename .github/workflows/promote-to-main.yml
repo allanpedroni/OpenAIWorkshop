@@ -15,6 +15,7 @@ on:
       - '**/*.md'
       - 'docs/**'
       - 'LICENSE'
+  workflow_dispatch:  # Allow manual trigger
 
 permissions:
   contents: read
@@ -31,7 +32,7 @@ jobs:
 
       - name: Create or update PR to main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           # Check if there's already an open PR from int-agentic → main
           EXISTING_PR=$(gh pr list \
